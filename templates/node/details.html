@@ -1,0 +1,902 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{{ node.name }}</h1>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+    
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Node Information</h5>
+                <button id="refreshBtn" class="btn btn-sm btn-light">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Connection Details</h6>
+                    <p><strong>IP:</strong> {{ node.ip }}</p>
+                    <p><strong>Port:</strong> {{ node.port }}</p>
+                </div>
+                <div class="col-md-6" id="healthInfo">
+                    <h6>Health Status</h6>
+                    <div class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Loading health information...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 d-flex align-items-center">
+                            Session Statistics
+                            <span class="ms-2" data-bs-toggle="tooltip" data-bs-placement="top" 
+                                title="Sessions with status 'NEW' are currently open (live) sessions">
+                                <i class="fas fa-info-circle text-primary" style="color: #8adfff !important;"></i>
+                            </span>
+                        </h5>
+                    </div>
+                </div>
+                <div class="card-body" id="sessionStats">
+                    <div class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Loading session statistics...</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">Identities</h5>
+                </div>
+                <div class="card-body" id="identitiesList">
+                    <div class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Loading identities...</p>
+                </div>
+            </div>
+            
+            <!-- New Node Quality Stats Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">Node Quality Stats</h5>
+                </div>
+                <div class="card-body" id="nodeQualityStats">
+                    <div class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Loading node quality statistics...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card mb-4">
+        <div class="card-header bg-warning">
+            <h5 class="mb-0">Services</h5>
+        </div>
+        <div class="card-body" id="servicesList">
+            <div class="spinner-border spinner-border-sm" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p>Loading services...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const nodeId = "{{ node.id }}";
+    
+    // Add this variable to track services we've seen
+    let knownServices = [];
+    
+    // Load persisted services from localStorage on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log("DOM loaded, initializing node dashboard");
+        const storedServices = localStorage.getItem(`node_${nodeId}_services`);
+        if (storedServices) {
+            knownServices = JSON.parse(storedServices);
+            console.log("Loaded saved services from localStorage:", knownServices);
+        }
+        
+        // Safely initialize Bootstrap tooltips if Bootstrap is available
+        try {
+            if (typeof bootstrap !== 'undefined') {
+                const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                tooltipTriggerList.map(function (tooltipTriggerEl) {
+                    return new bootstrap.Tooltip(tooltipTriggerEl);
+                });
+                console.log("Bootstrap tooltips initialized");
+            } else {
+                console.warn("Bootstrap not available, tooltips not initialized");
+            }
+        } catch (e) {
+            console.error("Error initializing tooltips:", e);
+        }
+        
+        loadNodeData();
+    });
+    
+    // Function to load node data
+    function loadNodeData() {
+        console.log(`Loading data for node ID: ${nodeId}`);
+        
+        // Show loading state in all sections
+        const elements = ['healthInfo', 'sessionStats', 'identitiesList', 'servicesList', 'nodeQualityStats'];
+        elements.forEach(id => {
+            document.getElementById(id).innerHTML = `
+                <div class="d-flex align-items-center">
+                    <div class="spinner-border spinner-border-sm me-2" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <span>Loading data...</span>
+                </div>
+            `;
+        });
+        
+        fetch(`/node/${nodeId}/data`)
+            .then(response => {
+                console.log(`Received response with status: ${response.status}`);
+                if (!response.ok) {
+                    throw new Error(`Network response error: ${response.status} ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log("Node data received:", data);
+                
+                // Check if we got an error response from the server
+                if (data.error) {
+                    throw new Error(`API Error: ${data.error}`);
+                }
+                
+                updateHealthInfo(data.health);
+                updateSessionStats(data.stats, data.stats_daily, data.sessions);
+                updateIdentitiesList(data.identities);
+                updateServicesList(data.services, data); // Pass the entire data object
+                updateNodeQualityStats(data);
+            })
+            .catch(error => {
+                console.error('Error loading node data:', error);
+                showDetailedError(error.message);
+            });
+    }
+    
+    // New function to show detailed error messages to the user
+    function showDetailedError(errorDetails = '') {
+        const elements = ['healthInfo', 'sessionStats', 'identitiesList', 'servicesList', 'nodeQualityStats'];
+        elements.forEach(id => {
+            document.getElementById(id).innerHTML = `
+                <div class="alert alert-danger">
+                    <h6>Connection Error</h6>
+                    <p>Failed to load data from node. Check browser console for details.</p>
+                    ${errorDetails ? `<p><strong>Error details:</strong> ${errorDetails}</p>` : ''}
+                    <button class="btn btn-sm btn-primary mt-2" onclick="loadNodeData()">
+                        <i class="fas fa-sync-alt"></i> Retry
+                    </button>
+                </div>
+            `;
+        });
+    }
+    
+    // Update health information
+    function updateHealthInfo(health) {
+        const healthInfoDiv = document.getElementById('healthInfo');
+        
+        let html = '<h6>Health Status</h6>';
+        if (health) {
+            html += `
+                <p><strong>Version:</strong> ${health.version}</p>
+                <p><strong>Uptime:</strong> ${health.uptime}</p>
+                <p><strong>Process:</strong> ${health.process}</p>
+                <p><strong>Status:</strong> <span class="badge bg-success">Online</span></p>
+            `;
+        } else {
+            html += '<p>No health information available</p>';
+        }
+        
+        healthInfoDiv.innerHTML = html;
+    }
+    
+    // Update session statistics
+    function updateSessionStats(stats, statsDaily, sessions) {
+        const statsDiv = document.getElementById('sessionStats');
+        
+        let html = '';
+        if (stats && stats.stats) {
+            // Get the values from the aggregated stats with correct snake_case property names
+            const sumTokens = stats.stats.sum_tokens || 0;
+            const count = stats.stats.count || 0;
+            const sumBytesSent = stats.stats.sum_bytes_sent || 0;
+            const sumBytesReceived = stats.stats.sum_bytes_received || 0;
+            const sumDuration = stats.stats.sum_duration || 0;
+            
+            // Calculate total earnings safely
+            const totalEarnings = (sumTokens / (10**18)).toFixed(4);
+            
+            // Calculate statistics from the actual sessions shown (last 50)
+            let visibleSessionsStats = {
+                count: 0,
+                sumTokens: 0,
+                sumBytesSent: 0,
+                sumBytesReceived: 0,
+                sumDuration: 0
+            };
+            
+            if (sessions && sessions.items && sessions.items.length > 0) {
+                visibleSessionsStats.count = sessions.items.length;
+                
+                sessions.items.forEach(session => {
+                    visibleSessionsStats.sumTokens += parseFloat(session.tokens || 0);
+                    visibleSessionsStats.sumBytesSent += parseInt(session.bytes_sent || 0);
+                    visibleSessionsStats.sumBytesReceived += parseInt(session.bytes_received || 0);
+                    visibleSessionsStats.sumDuration += parseInt(session.duration || 0);
+                });
+            }
+            
+            const visibleEarnings = (visibleSessionsStats.sumTokens / (10**18)).toFixed(4);
+            
+            // Create tabs for All-time and Today's stats
+            html += `
+                <ul class="nav nav-tabs mb-3" id="statsTab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="all-time-tab" data-bs-toggle="tab" data-bs-target="#all-time" type="button" role="tab">All-time Stats</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="today-tab" data-bs-toggle="tab" data-bs-target="#today" type="button" role="tab">Today's Stats</button>
+                    </li>
+                </ul>
+                <div class="tab-content" id="statsTabContent">
+                    <div class="tab-pane fade show active" id="all-time" role="tabpanel">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Total Node Statistics</h6>
+                                <p><strong>Total Sessions:</strong> ${count}</p>
+                                <p><strong>Total Earnings:</strong> ${totalEarnings} MYST</p>
+                                <p><strong>Total Bytes Sent:</strong> ${formatBytes(sumBytesSent)}</p>
+                                <p><strong>Total Bytes Received:</strong> ${formatBytes(sumBytesReceived)}</p>
+                                <p><strong>Total Duration:</strong> ${formatDuration(sumDuration)}</p>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <h6>Visible Sessions Statistics (Last 50)</h6>
+                                <p><strong>Sessions:</strong> ${visibleSessionsStats.count}</p>
+                                <p><strong>Earnings:</strong> ${visibleEarnings} MYST</p>
+                                <p><strong>Bytes Sent:</strong> ${formatBytes(visibleSessionsStats.sumBytesSent)}</p>
+                                <p><strong>Bytes Received:</strong> ${formatBytes(visibleSessionsStats.sumBytesReceived)}</p>
+                                <p><strong>Duration:</strong> ${formatDuration(visibleSessionsStats.sumDuration)}</p>
+                            </div>
+                        </div>
+                        <!-- Expandable sessions list -->
+                        ${sessions && sessions.items && sessions.items.length > 0 ? `
+                            <div class="mt-4">
+                                <a class="btn btn-outline-secondary btn-sm w-100" data-bs-toggle="collapse" href="#allSessionsCollapse" role="button" aria-expanded="false" aria-controls="allSessionsCollapse">
+                                    Show/Hide All Sessions (${sessions.items.length})
+                                </a>
+                                <small class="text-muted d-block text-center mt-1">Note: Only the most recent 50 sessions are shown</small>
+                                <div class="collapse mt-3" id="allSessionsCollapse">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-striped">
+                                            <thead><tr><th>ID</th><th>Created</th><th>Duration</th><th>Data Transferred</th><th>Earnings</th><th>Status</th></tr></thead>
+                                            <tbody>
+                                                ${sessions.items.map(session => {
+                                                    const sessionId = session.id ? session.id.substring(0, 8) + '...' : 'Unknown';
+                                                    const createdAt = session.created_at ? new Date(session.created_at).toLocaleString() : 'Unknown';
+                                                    const duration = formatDuration(session.duration || 0);
+                                                    const bytesTransferred = (session.bytes_received || 0) + (session.bytes_sent || 0);
+                                                    const sessionTokens = ((session.tokens || 0) / (10**18)).toFixed(4);
+                                                    return `
+                                                        <tr class="${session.status === 'New' ? 'table-warning' : ''}">
+                                                            <td>${sessionId}</td>
+                                                            <td>${createdAt}</td>
+                                                            <td>${duration}</td>
+                                                            <td>${formatBytes(bytesTransferred)}</td>
+                                                            <td>${sessionTokens} MYST</td>
+                                                            <td><span class="badge bg-${session.status === 'Completed' ? 'success' : 'warning'}">${session.status}</span></td>
+                                                        </tr>
+                                                    `;
+                                                }).join('')}
+                                            </tbody>    
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="tab-pane fade" id="today" role="tabpanel">
+            `;
+            
+            // Format today's date
+            const today = new Date();
+            const todayDate = today.toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            
+            // Try to get daily stats from API, if not available calculate from sessions
+            let dailyStatsAvailable = (statsDaily && statsDaily.items && statsDaily.items.length > 0);
+            let todayStats = null;
+            
+            // If no stats from the API, calculate from sessions
+            if (!dailyStatsAvailable && sessions && sessions.items && sessions.items.length > 0) {
+                // Extract today's date without time for comparison
+                const todayStr = today.toISOString().split('T')[0];
+                
+                // Filter sessions for today
+                const todaySessions = sessions.items.filter(session => {
+                    const sessionDate = new Date(session.created_at).toISOString().split('T')[0];
+                    return sessionDate === todayStr;
+                });
+                
+                // If we have sessions today, calculate stats
+                if (todaySessions.length > 0) {
+                    let totalTokens = 0;
+                    let totalBytesSent = 0;
+                    let totalBytesReceived = 0;
+                    let totalDuration = 0;
+                    
+                    todaySessions.forEach(session => {
+                        totalTokens += parseFloat(session.tokens || 0);
+                        totalBytesSent += parseInt(session.bytes_sent || 0);
+                        totalBytesReceived += parseInt(session.bytes_received || 0);
+                        totalDuration += parseInt(session.duration || 0);
+                    });
+                    
+                    // Create a stats object like what the API would return
+                    todayStats = {
+                        count: todaySessions.length,
+                        sumTokens: totalTokens,
+                        sumBytesSent: totalBytesSent,
+                        sumBytesReceived: totalBytesReceived,
+                        sumDuration: totalDuration
+                    };
+                    
+                    dailyStatsAvailable = true;
+                }
+            } else if (dailyStatsAvailable) {
+                // Use the API-provided stats
+                todayStats = statsDaily.items[0];
+            }
+            
+            html += `
+                    <h5 class="mb-3">${todayDate}</h5>
+            `;
+            
+            // Add today's stats if available (either from API or calculated)
+            if (dailyStatsAvailable && todayStats) {
+                const dailyTokens = (todayStats.sumTokens || 0) / (10**18);
+                const dailyCount = todayStats.count || 0;
+                const dailyBytesSent = todayStats.sumBytesSent || 0;
+                const dailyBytesReceived = todayStats.sumBytesReceived || 0;
+                const dailyDuration = todayStats.sumDuration || 0;
+                
+                html += `
+                    <p><strong>Today's Sessions:</strong> ${dailyCount}</p>
+                    <p><strong>Today's Earnings:</strong> ${dailyTokens.toFixed(4)} MYST</p>
+                    <p><strong>Today's Bytes Sent:</strong> ${formatBytes(dailyBytesSent)}</p>
+                    <p><strong>Today's Bytes Received:</strong> ${formatBytes(dailyBytesReceived)}</p>
+                    <p><strong>Today's Duration:</strong> ${formatDuration(dailyDuration)}</p>
+                `;
+                
+                // Add today's sessions table inside Today's tab
+                if (sessions && sessions.items && sessions.items.length > 0) {
+                    // Extract today's date without time for comparison
+                    const todayStr = today.toISOString().split('T')[0];
+                    
+                    // Filter sessions for today
+                    const todaySessions = sessions.items.filter(session => {
+                        const sessionDate = new Date(session.created_at).toISOString().split('T')[0];
+                        return sessionDate === todayStr;
+                    });
+                    
+                    // Sort sessions to show "New" status sessions at the top
+                    todaySessions.sort((a, b) => {
+                        if (a.status === 'New' && b.status !== 'New') return -1;
+                        if (a.status !== 'New' && b.status === 'New') return 1;
+                        return 0;
+                    });
+                    
+                    // If we have sessions today, display them in a table
+                    if (todaySessions.length > 0) {
+                        html += '<hr><h6 class="mt-4">Today\'s Sessions</h6>';
+                        html += '<div class="table-responsive">';
+                        html += '<table class="table table-sm table-striped">';
+                        html += '<thead><tr><th>ID</th><th>Created</th><th>Duration</th><th>Data Transferred</th><th>Earnings</th><th>Status</th></tr></thead>';
+                        html += '<tbody>';
+                        
+                        // Loop through each session and create a row
+                        todaySessions.forEach((session) => {
+                            const sessionId = session.id ? session.id.substring(0, 8) + '...' : 'Unknown';
+                            const createdAt = session.created_at ? new Date(session.created_at).toLocaleString() : 'Unknown';
+                            const duration = formatDuration(session.duration || 0);
+                            const bytesTransferred = (session.bytes_received || 0) + (session.bytes_sent || 0);
+                            const sessionTokens = ((session.tokens || 0) / (10**18)).toFixed(4);
+                            
+                            html += `
+                                <tr class="${session.status === 'New' ? 'table-warning' : ''}">
+                                    <td>${sessionId}</td>
+                                    <td>${createdAt}</td>
+                                    <td>${duration}</td>
+                                    <td>${formatBytes(bytesTransferred)}</td>
+                                    <td>${sessionTokens} MYST</td>
+                                    <td><span class="badge bg-${session.status === 'Completed' ? 'success' : 'warning'}">${session.status}</span></td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += '</tbody></table></div>';
+                    } else {
+                        html += '<hr><p>No sessions today</p>';
+                    }
+                }
+            } else {
+                html += `
+                    <p>No session statistics available for today</p>
+                `;
+            }
+            
+            html += `
+                    </div>
+                </div>
+            `;
+        } else {
+            html += '<p>No session statistics available</p>';
+        }
+        
+        statsDiv.innerHTML = html;
+    }
+    
+    // Update identities list
+    function updateIdentitiesList(identities) {
+        const identitiesDiv = document.getElementById('identitiesList');
+        
+        let html = '';
+        if (identities && identities.identities && identities.identities.length > 0) {
+            html += '<ul class="list-group">';
+            identities.identities.forEach(identity => {
+                html += `
+                    <li class="list-group-item">
+                        ${identity.id}
+                    </li>
+                `;
+            });
+            html += '</ul>';
+        } else {
+            html += '<p>No identities available</p>';
+        }
+        
+        identitiesDiv.innerHTML = html;
+    }
+    
+    // Update node quality stats
+    function updateNodeQualityStats(data) {
+        const nodeQualityStatsDiv = document.getElementById('nodeQualityStats');
+        
+        let html = '';
+        
+        // Convert uptime from string format (e.g., "1h 10m 30s") to hours
+        let uptimeHours = 0;
+        if (data.health && data.health.uptime) {
+            const uptimeParts = data.health.uptime.split(' ');
+            if (uptimeParts.length >= 3) {
+                const hours = parseInt(uptimeParts[0]) || 0;
+                const minutes = parseInt(uptimeParts[1]) || 0;
+                const seconds = parseInt(uptimeParts[2]) || 0;
+                uptimeHours = hours + (minutes / 60) + (seconds / 3600);
+            }
+        }
+        
+        // Calculate total bandwidth from session data if available
+        let bandwidthGB = 0;
+        if (data.stats && data.stats.stats) {
+            const totalBytes = (data.stats.stats.sum_bytes_sent || 0) + (data.stats.stats.sum_bytes_received || 0);
+            bandwidthGB = totalBytes / (1024 * 1024 * 1024); // Convert bytes to GB
+        }
+        
+        // Get quality metrics and location from the discovery API response
+        const quality = data.quality_metrics || {};
+        const location = data.location_info || {};
+        
+        // Create a table with all the quality metrics
+        html += `
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Quality</td>
+                            <td>${quality.quality !== undefined ? quality.quality.toFixed(1) : 'Unknown'}</td>
+                        </tr>
+                        <tr>
+                            <td>Latency (ms)</td>
+                            <td>${quality.latency !== undefined ? quality.latency.toFixed(2) : 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td>Uptime (hrs)</td>
+                            <td>${quality.uptime !== undefined ? quality.uptime : uptimeHours.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td>Bandwidth (GB)</td>
+                            <td>${quality.bandwidth !== undefined ? quality.bandwidth.toFixed(2) : bandwidthGB.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td>Packet Loss (%)</td>
+                            <td>${quality.packetLoss !== undefined ? quality.packetLoss.toFixed(2) : 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td>IP Type</td>
+                            <td>${location.ip_type || 'Unknown'}</td>
+                        </tr>
+                        <tr>
+                            <td>Country</td>
+                            <td>${location.country || 'Unknown'}</td>
+                        </tr>
+                        <tr>
+                            <td>City</td>
+                            <td>${location.city || 'Unknown'}</td>
+                        </tr>
+                        <tr>
+                            <td>ISP</td>
+                            <td>${location.isp || 'Unknown'}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        `;
+        
+        nodeQualityStatsDiv.innerHTML = html;
+    }
+    
+    // Format bytes to human readable format
+    function formatBytes(bytes, decimals = 2) {
+        // Handle invalid values
+        if (bytes === undefined || bytes === null || isNaN(bytes) || bytes === 0) {
+            return '0 Bytes';
+        }
+        
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        if (i < 0 || i >= sizes.length) return bytes + ' Bytes';
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+    
+    // Format duration in seconds to human readable format
+    function formatDuration(seconds) {
+        // Handle invalid values
+        if (seconds === undefined || seconds === null || isNaN(seconds)) {
+            return '0h 0m 0s';
+        }
+        
+        const secs = Math.floor(seconds % 60);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const hours = Math.floor(seconds / 3600);
+        
+        return `${hours}h ${minutes}m ${secs}s`;
+    }
+    
+    // Update services list
+    function updateServicesList(services, data) {
+        const servicesDiv = document.getElementById('servicesList');
+        
+        // Define all possible service types in Mysterium
+        const serviceTypes = ['data_transfer', 'wireguard', 'dvpn', 'scraping', 'quic_scraping'];
+        
+        // Create friendly names mapping for display
+        const serviceTypeNames = {
+            'data_transfer': 'B2B VPN/Data Transfer',
+            'wireguard': 'Public',
+            'dvpn': 'VPN',
+            'scraping': 'B2B Scraping',
+            'quic_scraping': 'QUIC Scraping'
+        };
+        
+        // Get friendly name for display
+        const getFriendlyName = (type) => {
+            return serviceTypeNames[type] || type;
+        };
+        
+        // Store the provider ID from identities for use with services
+        let providerId = null;
+        if (data && data.identities && data.identities.identities && data.identities.identities.length > 0) {
+            providerId = data.identities.identities[0].id;
+            console.log("Using provider ID from identity:", providerId);
+        }
+        
+        // Debug - log current services from API
+        console.log("Current running services from API:", services);
+        console.log("Current known services in UI:", knownServices);
+        
+        // Initialize trackable service map
+        let serviceMap = {};
+        
+        // First, create a map of all possible service types
+        serviceTypes.forEach(type => {
+            // Default state for service
+            serviceMap[type] = {
+                id: null,
+                type: type,
+                status: 'NotPresent',
+                providerId: providerId
+            };
+        });
+        
+        // Add running services from API to the map
+        if (services && services.length > 0) {
+            services.forEach(service => {
+                serviceMap[service.type] = {
+                    ...service,
+                    status: 'Running',
+                    providerId: providerId || service.providerId
+                };
+            });
+        }
+        
+        // Add any stopped services from previous state that aren't running
+        knownServices.forEach(service => {
+            if (service.status === 'Stopped' && 
+                (!serviceMap[service.type] || serviceMap[service.type].status !== 'Running')) {
+                serviceMap[service.type] = {
+                    ...service,
+                    providerId: providerId || service.providerId
+                };
+            }
+        });
+        
+        // Convert map back to array for display
+        let updatedServices = Object.values(serviceMap).filter(
+            // Only include services that are Running or Stopped
+            service => service.status === 'Running' || service.status === 'Stopped'
+        );
+        
+        // Update known services state
+        knownServices = updatedServices;
+        
+        // Save to localStorage
+        localStorage.setItem(`node_${nodeId}_services`, JSON.stringify(knownServices));
+        
+        // Render the services UI
+        let html = '';
+        if (knownServices.length > 0) {
+            html += '<div class="table-responsive">';
+            html += '<table class="table table-striped">';
+            html += '<thead><tr><th>Type</th><th>ID</th><th>Status</th><th>Actions</th></tr></thead>';
+            html += '<tbody>';
+            
+            // Sort services by type according to predefined order
+            const sortedServices = [...knownServices].sort((a, b) => {
+                const typeIndexA = serviceTypes.indexOf(a.type);
+                const typeIndexB = serviceTypes.indexOf(b.type);
+                return typeIndexA - typeIndexB;
+            });
+            
+            sortedServices.forEach(service => {
+                const isRunning = service.status === 'Running';
+                html += `
+                    <tr>
+                        <td>${getFriendlyName(service.type)}</td>
+                        <td>${service.id}</td>
+                        <td><span class="badge bg-${isRunning ? 'success' : 'warning'}">${service.status}</span></td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-success me-1 service-start-btn" 
+                                    data-provider-id="${service.providerId}" 
+                                    data-service-type="${service.type}" 
+                                    ${isRunning ? 'disabled' : ''}>Start</button>
+                                <button type="button" class="btn btn-sm btn-danger service-stop-btn" 
+                                    data-service-id="${service.id}" 
+                                    ${!isRunning ? 'disabled' : ''}>Stop</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+            html += '</tbody></table></div>';
+            
+            // Add buttons for missing service types
+            const missingTypes = serviceTypes.filter(type => 
+                !knownServices.some(service => service.type === type)
+            );
+            
+            if (missingTypes.length > 0 && providerId) {
+                html += '<div class="mt-3">';
+                html += '<h6>Start Additional Services:</h6>';
+                html += '<div class="d-flex flex-wrap gap-2">';
+                
+                missingTypes.forEach(type => {
+                    html += `
+                        <button type="button" class="btn btn-outline-success service-start-btn"
+                            data-provider-id="${providerId}" 
+                            data-service-type="${type}">Start ${getFriendlyName(type)}</button>
+                    `;
+                });
+                
+                html += '</div></div>';
+            }
+        } else {
+            html += '<p>No services running</p>';
+            
+            // If we have identities, show buttons for all service types
+            if (providerId) {
+                html += '<div class="mt-3">';
+                html += '<h6>Start Services:</h6>';
+                html += '<div class="d-flex flex-wrap gap-2">';
+                
+                serviceTypes.forEach(type => {
+                    html += `
+                        <button type="button" class="btn btn-outline-success service-start-btn"
+                            data-provider-id="${providerId}" 
+                            data-service-type="${type}">Start ${getFriendlyName(type)}</button>
+                    `;
+                });
+                
+                html += '</div></div>';
+            }
+        }
+        
+        servicesDiv.innerHTML = html;
+        
+        // Attach event listeners to service buttons
+        document.querySelectorAll('.service-start-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const providerId = this.getAttribute('data-provider-id');
+                const serviceType = this.getAttribute('data-service-type');
+                startService(providerId, serviceType);
+            });
+        });
+        
+        document.querySelectorAll('.service-stop-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const serviceId = this.getAttribute('data-service-id');
+                stopService(serviceId);
+            });
+        });
+    }
+    
+    // Function to start a service - completely rewritten version
+    function startService(providerId, serviceType) {
+        if (!providerId) {
+            alert("Error: Provider ID is missing. Please refresh the page and try again.");
+            return;
+        }
+        
+        // Clear existing service of this type
+        const serviceIndex = knownServices.findIndex(s => s.type === serviceType);
+        if (serviceIndex >= 0 && knownServices[serviceIndex].status === 'Stopped') {
+            console.log(`Removing stopped service of type ${serviceType} before starting new one`);
+            knownServices.splice(serviceIndex, 1);
+            localStorage.setItem(`node_${nodeId}_services`, JSON.stringify(knownServices));
+        }
+        
+        console.log(`Starting fresh ${serviceType} service with provider ID ${providerId}`);
+        
+        // Show loading state on all buttons for this service type
+        const startButtons = document.querySelectorAll(`.service-start-btn[data-service-type="${serviceType}"]`);
+        startButtons.forEach(btn => {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...';
+        });
+        
+        // Simple, consistent payload format
+        const payload = {
+            provider_id: providerId,
+            type: serviceType
+        };
+        
+        console.log(`Sending service start request:`, payload);
+        
+        // Make the API call
+        fetch(`/node/${nodeId}/start_service`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(response => {
+            console.log(`Service start response status: ${response.status}`);
+            return response.text().then(text => {
+                // Try to parse as JSON, but keep text if it's not valid JSON
+                try {
+                    const json = JSON.parse(text);
+                    if (!response.ok) {
+                        throw new Error(json.error || `Failed with status ${response.status}`);
+                    }
+                    return json;
+                } catch (e) {
+                    if (!response.ok) {
+                        throw new Error(`Failed with status ${response.status}: ${text}`);
+                    }
+                    console.warn("Response wasn't valid JSON:", text);
+                    return { success: true };
+                }
+            });
+        })
+        .then(data => {
+            console.log("Service start success:", data);
+            
+            // Force a complete data reload rather than trying to update our local state
+            setTimeout(() => {
+                loadNodeData();
+                
+                // Reset buttons after reload
+                startButtons.forEach(btn => {
+                    btn.disabled = false;
+                    btn.textContent = `Start ${serviceType}`;
+                });
+            }, 2000);
+        })
+        .catch(error => {
+            console.error('Error starting service:', error);
+            
+            // Reset buttons
+            startButtons.forEach(btn => {
+                btn.disabled = false;
+                btn.textContent = `Start ${serviceType}`;
+            });
+            
+            // Show error to user
+            alert(`Failed to start service: ${error.message}`);
+            
+            // Reload data to get current state
+            loadNodeData();
+        });
+    }
+    
+    // Function to stop a service
+    function stopService(serviceId) {
+        const formData = new FormData();
+        formData.append('service_id', serviceId);
+        
+        fetch(`/node/${nodeId}/stop_service`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to stop service');
+            }
+            return response;
+        })
+        .then(() => {
+            // Wait a moment for the service to stop before refreshing
+            setTimeout(() => {
+                // Reload data to update UI with current state
+                loadNodeData();
+            }, 1000);
+        })
+        .catch(error => {
+            console.error('Error stopping service:', error);
+            alert('Failed to stop service. Please try again.');
+        });
+    }
+    
+    // Refresh button click handler
+    document.getElementById('refreshBtn').addEventListener('click', loadNodeData);
+</script>
+{% endblock %}

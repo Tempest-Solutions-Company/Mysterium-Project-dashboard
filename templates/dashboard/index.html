@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>Mysterium Nodes Dashboard</h1>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('add_node') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Add Node
+            </a>
+        </div>
+    </div>
+    
+    <!-- New Token Info Card -->
+    <div class="card mb-4" id="tokenInfoCard">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">MYST Token Information</h5>
+            <div>
+                <button id="updateTokenBtn" class="btn btn-sm btn-light me-2">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <button type="button" class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#apiKeyModal">
+                    <i class="fas fa-key"></i> API Key
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div id="tokenData">
+                <div class="text-center py-3">
+                    <p class="text-muted">Enter your CoinMarketCap API key to view token information</p>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#apiKeyModal">
+                        Set API Key
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- API Key Modal -->
+    <div class="modal fade" id="apiKeyModal" tabindex="-1" aria-labelledby="apiKeyModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="apiKeyModalLabel">CoinMarketCap API Key</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="cmcApiKey" class="form-label">Enter your CoinMarketCap API Key</label>
+                        <input type="text" class="form-control" id="cmcApiKey" placeholder="Your API key">
+                        <div class="form-text">
+                            Your key is stored only in your browser and is not sent to our servers.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="saveApiKey">Save & Fetch Data</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Existing Nodes Section -->
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">Mysterium Nodes Dashboard</h1>
+            
+            {% if nodes %}
+                <div class="row row-cols-1 row-cols-md-3 g-4">
+                    {% for node in nodes %}
+                    <div class="col">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ node.name }}</h5>
+                                <h6 class="card-subtitle mb-2 text-muted">{{ node.ip }}:{{ node.port }}</h6>
+                                <p class="card-text">Added on {{ node.created_at }}</p>
+                                <a href="{{ url_for('node_details', node_id=node.id) }}" class="btn btn-primary">View Details</a>
+                                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ node.id }}">
+                                    Remove
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Delete Modal for {{ node.name }} -->
+                    <div class="modal fade" id="deleteModal{{ node.id }}" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Remove Node</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p>Are you sure you want to remove "{{ node.name }}"?</p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <form action="{{ url_for('remove_node', node_id=node.id) }}" method="post">
+                                        <button type="submit" class="btn btn-danger">Remove</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    <p>No nodes have been added yet. Click the "Add Node" button in the navigation bar to add a node.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Add Token Price Script to the bottom of the page -->
+<script>
+    // Save API key
+    document.getElementById('saveApiKey').addEventListener('click', function() {
+        const newApiKey = document.getElementById('cmcApiKey').value.trim();
+        if (newApiKey) {
+            localStorage.setItem('cmcApiKey', newApiKey);
+            fetchTokenData(newApiKey);
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('apiKeyModal'));
+            modal.hide();
+        }
+    });
+
+    // When page loads, retrieve the key
+    document.addEventListener('DOMContentLoaded', function() {
+        // Load API key from localStorage
+        const apiKey = localStorage.getItem('cmcApiKey');
+        if (apiKey) {
+            fetchTokenData(apiKey);
+        }
+        
+        // Update button
+        document.getElementById('updateTokenBtn').addEventListener('click', function() {
+            const apiKey = localStorage.getItem('cmcApiKey');
+            if (apiKey) {
+                fetchTokenData(apiKey);
+            } else {
+                // Show modal if no API key
+                const modal = new bootstrap.Modal(document.getElementById('apiKeyModal'));
+                modal.show();
+            }
+        });
+    });
+    
+    function fetchTokenData(apiKey) {
+        const tokenDataDiv = document.getElementById('tokenData');
+        
+        // Show loading state
+        tokenDataDiv.innerHTML = `
+            <div class="d-flex justify-content-center py-3">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        `;
+        
+        // Fetch token data
+        fetch(`/api/myst-price?api_key=${apiKey}`)
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || 'Failed to fetch token data');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Format the values
+                const price = parseFloat(data.price).toFixed(4);
+                const change1h = parseFloat(data.percent_change_1h || 0).toFixed(2);
+                const change24h = parseFloat(data.percent_change_24h || 0).toFixed(2);
+                const change7d = parseFloat(data.percent_change_7d || 0).toFixed(2);
+                const change30d = parseFloat(data.percent_change_30d || 0).toFixed(2);
+                const volume24h = formatCurrency(data.volume_24h || 0);
+                const volumeChange24h = parseFloat(data.volume_change_24h || 0).toFixed(2);
+                const marketCap = formatCurrency(data.market_cap || 0);
+                const fullyDilutedMarketCap = formatCurrency(data.fully_diluted_market_cap || 0);
+                const maxSupply = formatNumber(data.max_supply || 0);
+                const circulatingSupply = formatNumber(data.circulating_supply || 0);
+                const totalSupply = formatNumber(data.total_supply || 0);
+                const lastUpdated = new Date(data.last_updated).toLocaleString();
+                
+                // Create color-coded percentage indicators
+                const getColorClass = (value) => value >= 0 ? 'success' : 'danger';
+                const getArrow = (value) => value >= 0 ? '↑' : '↓';
+                
+                tokenDataDiv.innerHTML = `
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <h2 class="mb-1">${data.name} (${data.symbol})</h2>
+                            <p class="text-muted small">Last updated: ${lastUpdated}</p>
+                        </div>
+                        <div class="col-md-6 text-md-end">
+                            <h2 class="mb-0">$${price}</h2>
+                            <span class="badge bg-${getColorClass(change24h)}">
+                                ${getArrow(change24h)} ${Math.abs(change24h)}% (24h)
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <!-- Price Changes -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Price Changes</h5>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-sm">
+                                        <tbody>
+                                            <tr>
+                                                <td>1 Hour</td>
+                                                <td class="text-${getColorClass(change1h)}">
+                                                    ${getArrow(change1h)} ${Math.abs(change1h)}%
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>24 Hours</td>
+                                                <td class="text-${getColorClass(change24h)}">
+                                                    ${getArrow(change24h)} ${Math.abs(change24h)}%
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>7 Days</td>
+                                                <td class="text-${getColorClass(change7d)}">
+                                                    ${getArrow(change7d)} ${Math.abs(change7d)}%
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>30 Days</td>
+                                                <td class="text-${getColorClass(change30d)}">
+                                                    ${getArrow(change30d)} ${Math.abs(change30d)}%
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Volume -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Volume</h5>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-sm">
+                                        <tbody>
+                                            <tr>
+                                                <td>24h Volume</td>
+                                                <td>${volume24h}</td>
+                                            </tr>
+                                            <tr>
+                                                <td>Volume Change (24h)</td>
+                                                <td class="text-${getColorClass(volumeChange24h)}">
+                                                    ${getArrow(volumeChange24h)} ${Math.abs(volumeChange24h)}%
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Market Cap Info -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Market Cap</h5>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-sm">
+                                        <tbody>
+                                            <tr>
+                                                <td>Market Cap</td>
+                                                <td>${marketCap}</td>
+                                            </tr>
+                                            <tr>
+                                                <td>Fully Diluted Market Cap</td>
+                                                <td>${fullyDilutedMarketCap}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Supply Info -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Supply</h5>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-sm">
+                                        <tbody>
+                                            <tr>
+                                                <td>Circulating Supply</td>
+                                                <td>${circulatingSupply} MYST</td>
+                                            </tr>
+                                            <tr>
+                                                <td>Total Supply</td>
+                                                <td>${totalSupply} MYST</td>
+                                            </tr>
+                                            <tr>
+                                                <td>Max Supply</td>
+                                                <td>${maxSupply} MYST</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            })
+            .catch(error => {
+                console.error('Error fetching token data:', error);
+                tokenDataDiv.innerHTML = `
+                    <div class="alert alert-danger" role="alert">
+                        <h5>Error fetching token data</h5>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            });
+    }
+    
+    function formatCurrency(value) {
+        if (value >= 1000000000) {
+            return '$' + (value / 1000000000).toFixed(2) + 'B';
+        } else if (value >= 1000000) {
+            return '$' + (value / 1000000).toFixed(2) + 'M';
+        } else if (value >= 1000) {
+            return '$' + (value / 1000).toFixed(2) + 'K';
+        } else {
+            return '$' + value.toFixed(2);
+        }
+    }
+    
+    function formatNumber(value) {
+        return new Intl.NumberFormat().format(value);
+    }
+</script>
+{% endblock %}

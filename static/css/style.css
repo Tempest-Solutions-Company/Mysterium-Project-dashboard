@@ -1,0 +1,67 @@
+/* Custom styles for Mysterium Node Dashboard */
+
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+main {
+    flex: 1;
+}
+
+.card {
+    transition: transform 0.2s;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.card:hover {
+    transform: translateY(-5px);
+}
+
+.card-header h5 {
+    margin-bottom: 0;
+}
+
+.badge {
+    font-size: 85%;
+}
+
+/* Dashboard page */
+.node-card {
+    cursor: pointer;
+}
+
+/* Node details page */
+#refreshBtn {
+    transition: transform 0.3s;
+}
+
+#refreshBtn:active {
+    transform: rotate(180deg);
+}
+
+/* Stats display */
+.stats-container {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+}
+
+.stats-value {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #0d6efd;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 10px;
+    }
+    
+    .card-body {
+        padding: 1rem;
+    }
+}

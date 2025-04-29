@@ -1,0 +1,9 @@
+# Note: This application is not yet compatible with Python 3.13
+# Please use Python 3.11 or 3.12 instead
+Flask==2.2.3
+Werkzeug==2.2.3
+Flask-SQLAlchemy==3.0.3
+Flask-WTF==1.1.1
+requests==2.28.2
+SQLAlchemy==2.0.27
+WTForms==3.0.1

@@ -1,0 +1,490 @@
+import os
+import json
+from datetime import datetime, timedelta
+import requests
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session
+
+# Create templates directory if it doesn't exist
+templates_dir = os.path.join(os.path.dirname(__file__), 'templates')
+static_dir = os.path.join(os.path.dirname(__file__), 'static')
+
+if not os.path.exists(templates_dir):
+    os.makedirs(templates_dir)
+    os.makedirs(os.path.join(templates_dir, 'dashboard'))
+    os.makedirs(os.path.join(templates_dir, 'node'))
+
+if not os.path.exists(static_dir):
+    os.makedirs(static_dir)
+    os.makedirs(os.path.join(static_dir, 'css'))
+    os.makedirs(os.path.join(static_dir, 'js'))
+
+app = Flask(__name__, 
+           template_folder=templates_dir,
+           static_folder=static_dir)
+app.secret_key = 'mysterium-node-dashboard-secret-key'
+NODES_FILE = 'nodes.json'
+
+# Ensure the data file exists
+if not os.path.exists(NODES_FILE):
+    with open(NODES_FILE, 'w') as f:
+        json.dump([], f)
+
+# Helper functions for node data
+def get_nodes():
+    try:
+        with open(NODES_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_nodes(nodes):
+    with open(NODES_FILE, 'w') as f:
+        json.dump(nodes, f, default=str)
+
+def get_node_by_id(node_id):
+    nodes = get_nodes()
+    for node in nodes:
+        if node.get('id') == node_id:
+            return node
+    return None
+
+# Node API service
+class NodeAPI:
+    def __init__(self, ip, port, token=None):
+        self.base_url = f"http://{ip}:{port}/tequilapi"
+        self.token = token
+        self.headers = {'Accept': 'application/json'}
+        if token:
+            self.headers['Authorization'] = f'Bearer {token}'
+    
+    # Authentication method to get token
+    def authenticate(self, password):
+        import requests
+        url = f"{self.base_url}/auth/authenticate"
+        data = {'username': 'myst', 'password': password}
+        try:
+            response = requests.post(url, json=data)
+            response.raise_for_status()
+            token = response.json().get('token')
+            self.token = token
+            self.headers['Authorization'] = f'Bearer {token}'
+            return token
+        except Exception as e:
+            raise Exception(f"Authentication failed: {str(e)}")
+    
+    # Health check method
+    def health_check(self):
+        import requests
+        try:
+            response = requests.get(f"{self.base_url}/healthcheck", headers=self.headers)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            raise Exception(f"Health check failed: {str(e)}")
+    
+    # Session stats method
+    def session_stats(self):
+        import requests
+        try:
+            response = requests.get(f"{self.base_url}/sessions/stats-aggregated", headers=self.headers)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            raise Exception(f"Failed to get session stats: {str(e)}")
+    
+    # Session stats daily method
+    def session_stats_daily(self, query=None):
+        import requests
+        try:
+            response = requests.get(f"{self.base_url}/sessions/stats-daily", headers=self.headers, params=query)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            raise Exception(f"Failed to get daily session stats: {str(e)}")
+    
+    # Sessions list method
+    def sessions(self, query=None):
+        import requests
+        try:
+            response = requests.get(f"{self.base_url}/sessions", headers=self.headers, params=query)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            raise Exception(f"Failed to get sessions: {str(e)}")
+    
+    # Identity list method
+    def identity_list(self):
+        import requests
+        try:
+            response = requests.get(f"{self.base_url}/identities", headers=self.headers)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            raise Exception(f"Failed to get identities: {str(e)}")
+    
+    # Service list method
+    def service_list(self):
+        import requests
+        try:
+            response = requests.get(f"{self.base_url}/services", headers=self.headers)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            raise Exception(f"Failed to get services: {str(e)}")
+    
+    # Start service method
+    def start_service(self, request):
+        import requests
+        try:
+            print(f"Starting service with request: {request}")
+            # Send the complete request object to the API
+            response = requests.post(
+                f"{self.base_url}/services", 
+                json=request, 
+                headers=self.headers
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"Service start error details: {str(e)}")
+            raise Exception(f"Failed to start service: {str(e)}")
+
+    # Stop service method
+    def stop_service(self, service_id):
+        import requests
+        try:
+            response = requests.delete(f"{self.base_url}/services/{service_id}", headers=self.headers)
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            raise Exception(f"Failed to stop service: {str(e)}")
+
+
+# Routes
+@app.route('/')
+def index():
+    nodes = get_nodes()
+    return render_template('dashboard/index.html', title='Dashboard', nodes=nodes)
+
+@app.route('/add_node', methods=['GET', 'POST'])
+def add_node():
+    if request.method == 'POST':
+        name = request.form.get('name')
+        ip = request.form.get('ip')
+        port = request.form.get('port', 4449)
+        password = request.form.get('password')
+        
+        # Validate form data
+        if not name or not ip:
+            flash('Name and IP are required fields', 'danger')
+            return redirect(url_for('index'))
+        
+        # Check connection and authenticate
+        try:
+            node_api = NodeAPI(ip, port)
+            token = node_api.authenticate(password)
+            
+            nodes = get_nodes()
+            new_node = {
+                'id': len(nodes) + 1,
+                'name': name,
+                'ip': ip,
+                'port': port,
+                'token': token,
+                'created_at': datetime.now().isoformat()
+            }
+            nodes.append(new_node)
+            save_nodes(nodes)
+            
+            flash(f'Node {name} added successfully', 'success')
+            return redirect(url_for('index'))
+        except Exception as e:
+            flash(f'Error connecting to node: {str(e)}', 'danger')
+            return redirect(url_for('index'))
+    
+    return render_template('dashboard/add_node.html', title='Add Node')
+
+@app.route('/node/<int:node_id>')
+def node_details(node_id):
+    node = get_node_by_id(node_id)
+    if not node:
+        flash('Node not found', 'danger')
+        return redirect(url_for('index'))
+    
+    return render_template('node/details.html', title=f'Node: {node["name"]}', node=node)
+
+@app.route('/node/<int:node_id>/data')
+def node_data(node_id):
+    node = get_node_by_id(node_id)
+    if not node:
+        return jsonify({'error': 'Node not found'}), 404
+    
+    try:
+        node_api = NodeAPI(node['ip'], node['port'], node['token'])
+        
+        # Get node data
+        health = node_api.health_check()
+        stats = node_api.session_stats()
+        stats_daily = node_api.session_stats_daily()
+        services = node_api.service_list()
+        identities = node_api.identity_list()
+        sessions = node_api.sessions()
+        
+        # Fetch quality metrics from Mysterium discovery API if identities are available
+        quality_metrics = None
+        location_info = None
+        if identities and 'identities' in identities and len(identities['identities']) > 0:
+            provider_id = identities['identities'][0]['id']  # Use the first identity
+            try:
+                import requests
+                discovery_url = f"https://discovery.mysterium.network/api/v4/proposals?access_policy=all&provider_id={provider_id}"
+                discovery_response = requests.get(discovery_url, timeout=5)
+                if discovery_response.status_code == 200:
+                    discovery_data = discovery_response.json()
+                    if discovery_data and len(discovery_data) > 0:
+                        # Extract quality metrics and location from the first proposal
+                        quality_metrics = discovery_data[0].get('quality', {})
+                        location_info = discovery_data[0].get('location', {})
+                        print(f"Found quality metrics for provider {provider_id}: {quality_metrics}")
+                        print(f"Found location info for provider {provider_id}: {location_info}")
+            except Exception as e:
+                print(f"Error fetching discovery data: {str(e)}")
+        
+        # Debug: Log raw stats data to terminal
+        print("\n=== Session Stats Data ===")
+        print(f"Raw stats response: {json.dumps(stats, indent=2)}")
+        if 'stats' in stats:
+            print(f"Stats object keys: {list(stats['stats'].keys())}")
+            for key, value in stats['stats'].items():
+                print(f"  {key}: {value}")
+        else:
+            print("No 'stats' key in stats response")
+        print("===========================\n")
+        
+        # Existing session logging
+        print(f"\n=== Sessions data for node {node_id} ===")
+        if sessions and 'items' in sessions:
+            print(f"Number of sessions: {len(sessions['items'])}")
+            for idx, session in enumerate(sessions['items']):
+                print(f"Session {idx+1}:")
+                print(f"  ID: {session.get('id')}")
+                print(f"  Status: {session.get('status')}")
+                print(f"  Created at: {session.get('created_at')}")
+                print(f"  Duration: {session.get('duration')}s")
+                print(f"  Bytes received: {session.get('bytes_received')}")
+                print(f"  Bytes sent: {session.get('bytes_sent')}")
+                print(f"  Tokens: {float(session.get('tokens', 0))/(10**18)} MYST")
+        else:
+            print("No sessions data available")
+        print("===============================\n")
+        
+        return jsonify({
+            'health': health,
+            'stats': stats,
+            'stats_daily': stats_daily,
+            'services': services,
+            'identities': identities,
+            'sessions': sessions,
+            'quality_metrics': quality_metrics,
+            'location_info': location_info
+        })
+    except Exception as e:
+        print(f"Error getting node data: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/node/<int:node_id>/start_service', methods=['POST'])
+def start_service(node_id):
+    node = get_node_by_id(node_id)
+    if not node:
+        return jsonify({"error": "Node not found"}), 404
+    
+    # Detailed request logging
+    print(f"\n=== Service Start Request for Node {node_id} ===")
+    print(f"Request Content-Type: {request.headers.get('Content-Type')}")
+    print(f"Request method: {request.method}")
+    
+    try:
+        # Parse request data
+        if request.is_json:
+            data = request.json
+            print(f"Received JSON data: {data}")
+        else:
+            data = request.form.to_dict()
+            print(f"Received form data: {data}")
+        
+        # Extract service type and provider ID
+        service_type = data.get('type')
+        provider_id = data.get('provider_id')
+        
+        print(f"Extracted: service_type={service_type}, provider_id={provider_id}")
+        
+        if not service_type:
+            return jsonify({"error": "Service type is required"}), 400
+        
+        if not provider_id:
+            print("No provider_id in request, getting from identities API")
+            # Get identities to find a provider ID if not provided
+            node_api = NodeAPI(node['ip'], node['port'], node['token'])
+            identities = node_api.identity_list()
+            
+            if not identities or 'identities' not in identities or not identities['identities']:
+                return jsonify({"error": "No identities found on node"}), 400
+            
+            provider_id = identities['identities'][0]['id']
+            print(f"Using provider_id from identity: {provider_id}")
+        
+        # Create service request with exact format required by API
+        service_request = {
+            "provider_id": provider_id,
+            "type": service_type
+        }
+        
+        print(f"Final service request payload: {service_request}")
+        
+        # Initialize node API
+        node_api = NodeAPI(node['ip'], node['port'], node['token'])
+        
+        # Add headers logging to NodeAPI
+        node_api.headers['Content-Type'] = 'application/json'
+        print(f"Request headers: {node_api.headers}")
+        
+        # Direct HTTP request with detailed logging
+        import json
+        url = f"{node_api.base_url}/services"
+        print(f"Making POST request to: {url}")
+        
+        response = requests.post(
+            url,
+            headers=node_api.headers,
+            data=json.dumps(service_request)
+        )
+        
+        print(f"Response status: {response.status_code}")
+        print(f"Response headers: {response.headers}")
+        
+        try:
+            response_text = response.text
+            print(f"Response text: {response_text}")
+            response_json = response.json()
+            print(f"Response JSON: {response_json}")
+        except Exception as e:
+            print(f"Could not parse response as JSON: {e}")
+            response_json = None
+        
+        # Handle response appropriately
+        if response.status_code == 200 or response.status_code == 201:
+            # Success - return service data
+            if response_json:
+                return jsonify({"success": True, "service": response_json})
+            else:
+                return jsonify({"success": True})
+        else:
+            error_msg = response_json.get('error', {}).get('message') if response_json else response.text
+            print(f"Error starting service: {error_msg}")
+            return jsonify({"error": f"Failed to start service: {error_msg}"}), response.status_code
+                 
+    except Exception as e:
+        print(f"Exception starting service: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/node/<int:node_id>/stop_service', methods=['POST'])
+def stop_service(node_id):
+    node = get_node_by_id(node_id)
+    if not node:
+        flash('Node not found', 'danger')
+        return redirect(url_for('index'))
+    
+    service_id = request.form.get('service_id')
+    
+    try:
+        node_api = NodeAPI(node['ip'], node['port'], node['token'])
+        node_api.stop_service(service_id)
+        flash('Service stopped successfully', 'success')
+    except Exception as e:
+        flash(f'Error stopping service: {str(e)}', 'danger')
+    
+    return redirect(url_for('node_details', node_id=node_id))
+
+@app.route('/remove_node/<int:node_id>', methods=['POST'])
+def remove_node(node_id):
+    nodes = get_nodes()
+    for i, node in enumerate(nodes):
+        if node.get('id') == node_id:
+            del nodes[i]
+            save_nodes(nodes)
+            flash(f'Node {node["name"]} removed successfully', 'success')
+            break
+    return redirect(url_for('index'))
+
+# Global variable to cache CoinMarketCap data
+cmc_cache = {
+    'data': None,
+    'last_updated': None
+}
+
+@app.route('/api/myst-price')
+def myst_price():
+    # Check if we have cached data that's less than 10 minutes old
+    if cmc_cache['data'] and cmc_cache['last_updated'] and \
+       datetime.now() - cmc_cache['last_updated'] < timedelta(minutes=10):
+        return jsonify(cmc_cache['data'])
+    
+    # Fetch new data from CoinMarketCap
+    api_key = request.args.get('api_key', '')
+    if not api_key:
+        return jsonify({"error": "API key is required"}), 400
+    
+    try:
+        headers = {
+            'X-CMC_PRO_API_KEY': api_key,
+            'Accept': 'application/json'
+        }
+        
+        response = requests.get(
+            'https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?slug=mysterium',
+            headers=headers
+        )
+        
+        if response.status_code != 200:
+            return jsonify({"error": f"CoinMarketCap API error: {response.text}"}), response.status_code
+        
+        data = response.json()
+        
+        # Process the data to extract just what we need
+        if 'data' in data and data['data']:
+            coin_data = list(data['data'].values())[0]  # Get the first (and only) item
+            processed_data = {
+                'name': coin_data['name'],
+                'symbol': coin_data['symbol'],
+                'price': coin_data['quote']['USD']['price'],
+                'percent_change_1h': coin_data['quote']['USD']['percent_change_1h'],
+                'percent_change_24h': coin_data['quote']['USD']['percent_change_24h'],
+                'percent_change_7d': coin_data['quote']['USD']['percent_change_7d'],
+                'percent_change_30d': coin_data['quote']['USD']['percent_change_30d'],
+                'volume_24h': coin_data['quote']['USD']['volume_24h'],
+                'volume_change_24h': coin_data['quote']['USD']['volume_change_24h'],
+                'market_cap': coin_data['quote']['USD']['market_cap'],
+                'fully_diluted_market_cap': coin_data['quote']['USD']['fully_diluted_market_cap'],
+                'max_supply': coin_data['max_supply'],
+                'circulating_supply': coin_data['circulating_supply'],
+                'total_supply': coin_data['total_supply'],
+                'last_updated': coin_data['quote']['USD']['last_updated']
+            }
+            
+            # Update cache
+            cmc_cache['data'] = processed_data
+            cmc_cache['last_updated'] = datetime.now()
+            
+            return jsonify(processed_data)
+        else:
+            return jsonify({"error": "No data found for Mysterium token"}), 404
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.context_processor
+def inject_now():
+    return {'now': datetime.now()}
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)
