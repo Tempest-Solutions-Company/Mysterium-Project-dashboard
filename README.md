@@ -12,7 +12,11 @@ A web-based dashboard for monitoring and managing multiple Mysterium Network nod
 - **MYST Token Information**: Real-time token price, market data, and trends
 - **Responsive Design**: Works on desktop and mobile devices
 
-![Mysterium Node Dashboard](https://imgur.com/tNs7WPV)
+<img src="https://i.imgur.com/tNs7WPV.png" alt="Mysterium Node Dashboard" width="500" />
+<img src="https://i.imgur.com/nHBnf6p.png" alt="Mysterium Node Dashboard" width="500" />
+<img src="https://i.imgur.com/fZ9d74K.png" alt="Mysterium Node Dashboard" width="500" />
+
+
 
 ## Prerequisites
 
