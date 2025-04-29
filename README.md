@@ -12,6 +12,8 @@ A web-based dashboard for monitoring and managing multiple Mysterium Network nod
 - **MYST Token Information**: Real-time token price, market data, and trends
 - **Responsive Design**: Works on desktop and mobile devices
 
+![Mysterium Node Dashboard](https://imgur.com/tNs7WPV)
+
 ## Prerequisites
 
 - Python 3.7+ installed on your system
