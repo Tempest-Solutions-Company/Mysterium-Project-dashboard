@@ -1,4 +1,4 @@
-# Mysterium Node Dashboard
+# Local Mysterium Node Dashboard
 
 A web-based dashboard for monitoring and managing multiple Mysterium Network nodes with detailed statistics, service management, and token information.
 
