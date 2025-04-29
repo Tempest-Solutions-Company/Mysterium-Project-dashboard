@@ -158,7 +158,29 @@ class NodeAPI:
             return True
         except Exception as e:
             raise Exception(f"Failed to stop service: {str(e)}")
-
+    
+    # Connection statistics method for active sessions
+    def connection_statistics(self):
+        import requests
+        try:
+            response = requests.get(f"{self.base_url}/connection/statistics", headers=self.headers)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"Failed to get connection statistics: {str(e)}")
+            # Return empty stats instead of raising error
+            return {"bytesReceived": 0, "bytesSent": 0, "duration": 0, "tokensSpent": 0}
+    
+    # Get individual session data
+    def session_by_id(self, session_id):
+        import requests
+        try:
+            response = requests.get(f"{self.base_url}/sessions/{session_id}", headers=self.headers)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"Failed to get session by ID: {str(e)}")
+            return None
 
 # Routes
 @app.route('/')
@@ -481,6 +503,46 @@ def myst_price():
     
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/node/<int:node_id>/connection_stats')
+def connection_stats(node_id):
+    node = get_node_by_id(node_id)
+    if not node:
+        return jsonify({'error': 'Node not found'}), 404
+    
+    try:
+        node_api = NodeAPI(node['ip'], node['port'], node['token'])
+        stats = node_api.connection_statistics()
+        
+        # Log connection statistics for debugging
+        print(f"\n=== Connection Statistics for node {node_id} ===")
+        print(f"Stats: {json.dumps(stats, indent=2)}")
+        print("=========================================\n")
+        
+        return jsonify(stats)
+    except Exception as e:
+        print(f"Error getting connection stats: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/node/<int:node_id>/session_stats/<string:session_id>')
+def session_stats(node_id, session_id):
+    node = get_node_by_id(node_id)
+    if not node:
+        return jsonify({'error': 'Node not found'}), 404
+    
+    try:
+        node_api = NodeAPI(node['ip'], node['port'], node['token'])
+        session_data = node_api.session_by_id(session_id)
+        
+        # Log session data for debugging
+        print(f"\n=== Session Stats for node {node_id}, session {session_id} ===")
+        print(f"Data: {json.dumps(session_data, indent=2)}")
+        print("=========================================\n")
+        
+        return jsonify(session_data)
+    except Exception as e:
+        print(f"Error getting session stats: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.context_processor
 def inject_now():

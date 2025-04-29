@@ -55,6 +55,27 @@
                     <p>Loading session statistics...</p>
                 </div>
             </div>
+            
+            <!-- New Active Sessions Card -->
+            <div class="card mb-4" id="activeSessionsCard">
+                <div class="card-header bg-warning text-dark">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 d-flex align-items-center">
+                            <i class="fas fa-plug me-2"></i> Active Sessions
+                            <span id="activeSessionsCount" class="badge bg-danger ms-2">0</span>
+                        </h5>
+                        <button id="refreshActiveBtn" class="btn btn-sm btn-dark">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body" id="activeSessionsStats">
+                    <div class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Loading active sessions...</p>
+                </div>
+            </div>
         </div>
         
         <div class="col-md-6">
@@ -168,6 +189,7 @@
                 
                 updateHealthInfo(data.health);
                 updateSessionStats(data.stats, data.stats_daily, data.sessions);
+                updateActiveSessionsStats(data.sessions);  // Add this line
                 updateIdentitiesList(data.identities);
                 updateServicesList(data.services, data); // Pass the entire data object
                 updateNodeQualityStats(data);
@@ -896,7 +918,228 @@
         });
     }
     
+    // Update active sessions statistics
+    function updateActiveSessionsStats(sessions) {
+        const activeSessionsDiv = document.getElementById('activeSessionsStats');
+        const activeSessionsCard = document.getElementById('activeSessionsCard');
+        const activeSessionsCount = document.getElementById('activeSessionsCount');
+        
+        let html = '';
+        
+        // Filter active sessions (status = "New")
+        const activeSessions = sessions && sessions.items ? 
+            sessions.items.filter(session => session.status === 'New') : [];
+        
+        // Update active sessions count
+        activeSessionsCount.textContent = activeSessions.length;
+        
+        // Show/hide card based on whether there are active sessions
+        if (activeSessions.length === 0) {
+            html = '<div class="text-center py-3">';
+            html += '<i class="fas fa-plug fa-3x text-muted mb-3"></i>';
+            html += '<p class="mb-0">No active sessions at the moment</p>';
+            html += '</div>';
+            activeSessionsDiv.innerHTML = html;
+        } else {
+            // Show loading indicator while we fetch real-time stats
+            html = `
+                <div class="d-flex justify-content-center mb-3">
+                    <div class="spinner-border spinner-border-sm text-warning me-2" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <span>Fetching real-time stats...</span>
+                </div>
+            `;
+            activeSessionsDiv.innerHTML = html;
+            
+            // Fetch real-time connection statistics
+            fetchConnectionStats();
+        }
+    }
+    
+    // New function to fetch real-time connection statistics
+    function fetchConnectionStats() {
+        // Get active sessions directly from the main data endpoint
+        fetch(`/node/${nodeId}/data`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.sessions && data.sessions.items) {
+                    const activeSessions = data.sessions.items.filter(session => session.status === 'New');
+                    
+                    if (activeSessions.length > 0) {
+                        // Pass empty connection stats since that endpoint doesn't work for provider mode
+                        displayActiveSessionsWithRealTimeData(activeSessions, {});
+                    } else {
+                        // No active sessions
+                        const activeSessionsDiv = document.getElementById('activeSessionsStats');
+                        activeSessionsDiv.innerHTML = `
+                            <div class="text-center py-3">
+                                <i class="fas fa-plug fa-3x text-muted mb-3"></i>
+                                <p class="mb-0">No active sessions at the moment</p>
+                            </div>
+                        `;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error("Error fetching sessions:", error);
+                const activeSessionsDiv = document.getElementById('activeSessionsStats');
+                activeSessionsDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <p>Error fetching session data: ${error.message}</p>
+                        <button class="btn btn-sm btn-primary mt-2" onclick="fetchConnectionStats()">
+                            <i class="fas fa-sync-alt"></i> Retry
+                        </button>
+                    </div>
+                `;
+            });
+    }
+    
+    // Function to display active sessions with real-time data
+    function displayActiveSessionsWithRealTimeData(activeSessions, connStats) {
+        const activeSessionsDiv = document.getElementById('activeSessionsStats');
+        let html = '';
+        
+        // Create object to store session data including estimated data transfer
+        const sessionData = {};
+        
+        // Initialize estimated data for each session
+        activeSessions.forEach(session => {
+            const sessionId = session.id;
+            const startTime = session.created_at ? new Date(session.created_at) : new Date();
+            const now = new Date();
+            const durationSeconds = Math.floor((now - startTime) / 1000);
+            
+            // Initialize with data from the sessions endpoint
+            sessionData[sessionId] = {
+                id: sessionId,
+                startTime: startTime,
+                durationSeconds: durationSeconds,
+                consumerCountry: session.consumer_country || 'Unknown'
+            };
+        });
+        
+        // Show the active sessions header with a clear message about API limitations
+        html += `
+            <div class="alert alert-warning">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <strong>${activeSessions.length} Active Sessions</strong>
+                    <span class="badge bg-danger blink">LIVE</span>
+                </div>
+                <div class="small mb-2 text-danger">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    Real-time data transfer is not available from the Nodes API it is a limitation of the Mysterium nodes API.
+                </div>
+            </div>
+        `;
+        
+        // Create a table for active sessions
+        html += '<div class="table-responsive">';
+        html += '<table class="table table-hover table-sm" id="active-sessions-table">';
+        html += '<thead><tr><th>ID</th><th>Started</th><th>Duration</th><th>Consumer</th></tr></thead>';
+        html += '<tbody>';
+        
+        activeSessions.forEach(session => {
+            const sessionId = session.id;
+            const displayId = sessionId ? sessionId.substring(0, 8) + '...' : 'Unknown';
+            const startTime = sessionData[sessionId].startTime;
+            const durationSeconds = sessionData[sessionId].durationSeconds;
+            const duration = formatDuration(durationSeconds);
+            const consumerCountry = sessionData[sessionId].consumerCountry;
+            
+            html += `
+                <tr data-session-id="${sessionId}">
+                    <td>${displayId}</td>
+                    <td>${startTime.toLocaleTimeString()}</td>
+                    <td class="session-duration">${duration}</td>
+                    <td>${consumerCountry}</td>
+                </tr>
+            `;
+        });
+        
+        html += '</tbody></table></div>';
+        
+        // Add refresh controls
+        html += `
+            <div class="text-center mt-3">
+                <div class="text-muted small mb-2">
+                    Live session data refreshes automatically every 5 seconds
+                </div>
+                <button id="manualRefreshStats" class="btn btn-sm btn-outline-warning">
+                    <i class="fas fa-sync-alt me-1"></i> Refresh Now
+                </button>
+            </div>
+        `;
+        
+        // Add custom CSS for the blinking live indicator
+        html += `
+            <style>
+                .blink {
+                    animation: blinker 1.5s linear infinite;
+                }
+                @keyframes blinker {
+                    50% { opacity: 0.5; }
+                }
+            </style>
+        `;
+        
+        activeSessionsDiv.innerHTML = html;
+        
+        // Set up regular updates for session durations
+        updateSessionDurations(sessionData);
+        
+        // Add event listener for manual refresh button
+        document.getElementById('manualRefreshStats').addEventListener('click', fetchConnectionStats);
+    }
+    
+    // Simplified function to update all session durations regularly
+    function updateSessionDurations(sessionData) {
+        setInterval(() => {
+            const now = new Date();
+            
+            // Update each row's duration
+            for (const sessionId in sessionData) {
+                const session = sessionData[sessionId];
+                const startTime = session.startTime;
+                const durationSeconds = Math.floor((now - startTime) / 1000);
+                
+                // Update sessionData object
+                session.durationSeconds = durationSeconds;
+                
+                // Update row if it exists
+                const durationCell = document.querySelector(`#active-sessions-table tr[data-session-id="${sessionId}"] .session-duration`);
+                if (durationCell) {
+                    durationCell.textContent = formatDuration(durationSeconds);
+                }
+            }
+        }, 1000); // Update every second
+    }
+    
     // Refresh button click handler
     document.getElementById('refreshBtn').addEventListener('click', loadNodeData);
+    
+    // Add event listener for active sessions refresh button
+    document.getElementById('refreshActiveBtn').addEventListener('click', function() {
+        // Show spinner during refresh
+        document.getElementById('activeSessionsStats').innerHTML = `
+            <div class="d-flex justify-content-center">
+                <div class="spinner-border text-warning" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        `;
+        
+        // Refresh data
+        loadNodeData();
+    });
+    
+    // Set up automatic refresh for active sessions every 5 seconds (more frequent than before)
+    setInterval(function() {
+        // Only refresh if there are active sessions
+        const activeCount = parseInt(document.getElementById('activeSessionsCount').textContent);
+        if (activeCount > 0) {
+            fetchConnectionStats();
+        }
+    }, 5000); // 5 seconds
 </script>
 {% endblock %}

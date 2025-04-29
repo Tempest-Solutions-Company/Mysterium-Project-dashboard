@@ -1,7 +1,8 @@
-# Local Mysterium Node Dashboard
+# Mysterium Node Dashboard
 
 A web-based dashboard for monitoring and managing multiple Mysterium Network nodes with detailed statistics, service management, and token information.
 
+<img src="https://i.imgur.com/tNs7WPV.png" alt="Mysterium Node Dashboard" width="750" />
 
 ## Features
 
@@ -11,12 +12,6 @@ A web-based dashboard for monitoring and managing multiple Mysterium Network nod
 - **Node Quality Metrics**: Monitor node performance, latency, and market position
 - **MYST Token Information**: Real-time token price, market data, and trends
 - **Responsive Design**: Works on desktop and mobile devices
-
-<img src="https://i.imgur.com/tNs7WPV.png" alt="Mysterium Node Dashboard" width="500" />
-<img src="https://i.imgur.com/nHBnf6p.png" alt="Mysterium Node Dashboard" width="500" />
-<img src="https://i.imgur.com/fZ9d74K.png" alt="Mysterium Node Dashboard" width="500" />
-
-
 
 ## Prerequisites
 
