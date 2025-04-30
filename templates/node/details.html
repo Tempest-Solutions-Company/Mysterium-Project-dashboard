@@ -22,6 +22,10 @@
                     <h6>Connection Details</h6>
                     <p><strong>IP:</strong> {{ node.ip }}</p>
                     <p><strong>Port:</strong> {{ node.port }}</p>
+                    <!-- Add Statistics Button -->
+                    <button id="viewStatsBtn" class="btn btn-sm btn-primary">
+                        <i class="fas fa-chart-bar me-1"></i> View Statistics Charts
+                    </button>
                 </div>
                 <div class="col-md-6" id="healthInfo">
                     <h6>Health Status</h6>
@@ -118,9 +122,81 @@
         </div>
     </div>
 </div>
+
+<!-- Add Statistics Modal -->
+<div class="modal fade" id="statsModal" tabindex="-1" aria-labelledby="statsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="statsModalLabel">Session Statistics Charts</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-3">
+                    <div class="btn-group" role="group" aria-label="Chart period selection">
+                        <button type="button" class="btn btn-outline-primary chart-period active" data-days="7">7 Days</button>
+                        <button type="button" class="btn btn-outline-primary chart-period" data-days="14">14 Days</button>
+                        <button type="button" class="btn btn-outline-primary chart-period" data-days="30">30 Days</button>
+                    </div>
+                </div>
+                
+                <div id="chartLoading" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading charts...</span>
+                    </div>
+                    <p class="mt-2">Loading session statistics...</p>
+                </div>
+                
+                <div id="chartContainer" class="row" style="display: none;">
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header">Sessions Per Day</div>
+                            <div class="card-body">
+                                <canvas id="sessionsChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header">Earnings Per Day (MYST)</div>
+                            <div class="card-body">
+                                <canvas id="earningsChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header">Data Transfer Per Day</div>
+                            <div class="card-body">
+                                <canvas id="dataTransferChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header">Connection Duration Per Day</div>
+                            <div class="card-body">
+                                <canvas id="durationChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="noDataMessage" class="alert alert-info text-center" style="display: none;">
+                    <i class="fas fa-info-circle me-2"></i>
+                    No session data available for the selected period.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
 <script>
     const nodeId = "{{ node.id }}";
     
@@ -182,12 +258,15 @@
             .then(data => {
                 console.log("Node data received:", data);
                 
+                // Store data globally for other functions to access
+                window.nodeData = data;
+                
                 // Check if we got an error response from the server
                 if (data.error) {
                     throw new Error(`API Error: ${data.error}`);
                 }
                 
-                updateHealthInfo(data.health);
+                updateHealthInfo(data.health, data.nat_info);
                 updateSessionStats(data.stats, data.stats_daily, data.sessions);
                 updateActiveSessionsStats(data.sessions);  // Add this line
                 updateIdentitiesList(data.identities);
@@ -198,6 +277,36 @@
                 console.error('Error loading node data:', error);
                 showDetailedError(error.message);
             });
+    }
+    
+    // Format bytes to human readable format
+    function formatBytes(bytes, decimals = 2) {
+        // Handle invalid values
+        if (bytes === undefined || bytes === null || isNaN(bytes) || bytes === 0) {
+            return '0 Bytes';
+        }
+        
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        if (i < 0 || i >= sizes.length) return bytes + ' Bytes';
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+    
+    // Format duration in seconds to human readable format
+    function formatDuration(seconds) {
+        // Handle invalid values
+        if (seconds === undefined || seconds === null || isNaN(seconds)) {
+            return '0h 0m 0s';
+        }
+        
+        const secs = Math.floor(seconds % 60);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const hours = Math.floor(seconds / 3600);
+        
+        return `${hours}h ${minutes}m ${secs}s`;
     }
     
     // New function to show detailed error messages to the user
@@ -217,9 +326,12 @@
         });
     }
     
-    // Update health information
-    function updateHealthInfo(health) {
+    // Update health information to include NAT type and monitoring status
+    function updateHealthInfo(health, natInfo) {
         const healthInfoDiv = document.getElementById('healthInfo');
+        
+        // Debug NAT info 
+        console.log("NAT info received:", natInfo);
         
         let html = '<h6>Health Status</h6>';
         if (health) {
@@ -227,13 +339,108 @@
                 <p><strong>Version:</strong> ${health.version}</p>
                 <p><strong>Uptime:</strong> ${health.uptime}</p>
                 <p><strong>Process:</strong> ${health.process}</p>
-                <p><strong>Status:</strong> <span class="badge bg-success">Online</span></p>
             `;
+
+            // Add NAT type information
+            if (natInfo && typeof natInfo === 'object') {
+                console.log("Adding NAT info to display:", natInfo);
+                
+                // Extract NAT properties, with defaults if missing
+                const natType = (natInfo.type || 'unknown').toLowerCase();
+                
+                // Display with color indicators based on status
+                let natTypeClass, natTypeExplanation;
+                
+                switch(natType) {
+                    case 'symmetric':
+                        natTypeClass = 'text-warning';
+                        natTypeExplanation = 'Limited connectivity - may cause issues with some services';
+                        break;
+                    case 'fullcone':
+                        natTypeClass = 'text-success';
+                        natTypeExplanation = 'Good - full cone NAT allows incoming connections from any source';
+                        break;
+                    case 'none':
+                        natTypeClass = 'text-success';
+                        natTypeExplanation = 'Excellent - direct internet connection without NAT';
+                        break;
+                    case 'unknown':
+                        natTypeClass = 'text-muted';
+                        natTypeExplanation = 'Unable to determine NAT type';
+                        break;
+                    default:
+                        natTypeClass = 'text-info';
+                        natTypeExplanation = 'Standard NAT configuration';
+                }
+                
+                html += `
+                    <p>
+                        <strong>NAT Type:</strong> 
+                        <span class="${natTypeClass}">${natType.toUpperCase()}</span>
+                        <i class="fas fa-info-circle ms-1" data-bs-toggle="tooltip" title="${natTypeExplanation}"></i>
+                    </p>
+                `;
+            } else {
+                console.warn("NAT info is missing or not an object:", natInfo);
+                html += `<p><strong>NAT Info:</strong> <span class="text-muted">Not available from node</span></p>`;
+            }
+            
+            // Add monitoring status if available
+            if (window.nodeData && window.nodeData.monitoring_status) {
+                const monitoringStatus = window.nodeData.monitoring_status;
+                console.log("Monitoring status:", monitoringStatus);
+                
+                const status = monitoringStatus.status || 'unknown';
+                
+                // Display with color indicators based on status
+                let statusClass, statusExplanation;
+                
+                switch(status.toLowerCase()) {
+                    case 'online':
+                    case 'success': // Add support for "success" status
+                        statusClass = 'text-success';
+                        statusExplanation = 'Node is being monitored and is online';
+                        break;
+                    case 'offline':
+                        statusClass = 'text-danger';
+                        statusExplanation = 'Node is being monitored but is offline';
+                        break;
+                    case 'unknown':
+                        statusClass = 'text-muted';
+                        statusExplanation = 'Node monitoring status is unknown';
+                        break;
+                    default:
+                        statusClass = 'text-info';
+                        statusExplanation = 'Status from node monitoring service';
+                }
+                
+                html += `
+                    <p>
+                        <strong>Monitoring Status:</strong> 
+                        <span class="${statusClass}">${status.toUpperCase()}</span>
+                        <i class="fas fa-info-circle ms-1" data-bs-toggle="tooltip" title="${statusExplanation}"></i>
+                    </p>
+                `;
+            }
+            
+            html += `<p><strong>Status:</strong> <span class="badge bg-success">Online</span></p>`;
         } else {
             html += '<p>No health information available</p>';
         }
         
         healthInfoDiv.innerHTML = html;
+        
+        // Re-initialize tooltips for the new content
+        try {
+            if (typeof bootstrap !== 'undefined') {
+                const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                tooltipTriggerList.map(function (tooltipTriggerEl) {
+                    return new bootstrap.Tooltip(tooltipTriggerEl);
+                });
+            }
+        } catch (e) {
+            console.error("Error initializing tooltips:", e);
+        }
     }
     
     // Update session statistics
@@ -305,7 +512,6 @@
                                 <p><strong>Duration:</strong> ${formatDuration(visibleSessionsStats.sumDuration)}</p>
                             </div>
                         </div>
-                        <!-- Expandable sessions list -->
                         ${sessions && sessions.items && sessions.items.length > 0 ? `
                             <div class="mt-4">
                                 <a class="btn btn-outline-secondary btn-sm w-100" data-bs-toggle="collapse" href="#allSessionsCollapse" role="button" aria-expanded="false" aria-controls="allSessionsCollapse">
@@ -342,140 +548,136 @@
                         ` : ''}
                     </div>
                     <div class="tab-pane fade" id="today" role="tabpanel">
-            `;
-            
-            // Format today's date
-            const today = new Date();
-            const todayDate = today.toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            });
-            
-            // Try to get daily stats from API, if not available calculate from sessions
-            let dailyStatsAvailable = (statsDaily && statsDaily.items && statsDaily.items.length > 0);
-            let todayStats = null;
-            
-            // If no stats from the API, calculate from sessions
-            if (!dailyStatsAvailable && sessions && sessions.items && sessions.items.length > 0) {
-                // Extract today's date without time for comparison
-                const todayStr = today.toISOString().split('T')[0];
-                
-                // Filter sessions for today
-                const todaySessions = sessions.items.filter(session => {
-                    const sessionDate = new Date(session.created_at).toISOString().split('T')[0];
-                    return sessionDate === todayStr;
-                });
-                
-                // If we have sessions today, calculate stats
-                if (todaySessions.length > 0) {
-                    let totalTokens = 0;
-                    let totalBytesSent = 0;
-                    let totalBytesReceived = 0;
-                    let totalDuration = 0;
-                    
-                    todaySessions.forEach(session => {
-                        totalTokens += parseFloat(session.tokens || 0);
-                        totalBytesSent += parseInt(session.bytes_sent || 0);
-                        totalBytesReceived += parseInt(session.bytes_received || 0);
-                        totalDuration += parseInt(session.duration || 0);
-                    });
-                    
-                    // Create a stats object like what the API would return
-                    todayStats = {
-                        count: todaySessions.length,
-                        sumTokens: totalTokens,
-                        sumBytesSent: totalBytesSent,
-                        sumBytesReceived: totalBytesReceived,
-                        sumDuration: totalDuration
-                    };
-                    
-                    dailyStatsAvailable = true;
-                }
-            } else if (dailyStatsAvailable) {
-                // Use the API-provided stats
-                todayStats = statsDaily.items[0];
-            }
-            
-            html += `
-                    <h5 class="mb-3">${todayDate}</h5>
-            `;
-            
-            // Add today's stats if available (either from API or calculated)
-            if (dailyStatsAvailable && todayStats) {
-                const dailyTokens = (todayStats.sumTokens || 0) / (10**18);
-                const dailyCount = todayStats.count || 0;
-                const dailyBytesSent = todayStats.sumBytesSent || 0;
-                const dailyBytesReceived = todayStats.sumBytesReceived || 0;
-                const dailyDuration = todayStats.sumDuration || 0;
-                
-                html += `
-                    <p><strong>Today's Sessions:</strong> ${dailyCount}</p>
-                    <p><strong>Today's Earnings:</strong> ${dailyTokens.toFixed(4)} MYST</p>
-                    <p><strong>Today's Bytes Sent:</strong> ${formatBytes(dailyBytesSent)}</p>
-                    <p><strong>Today's Bytes Received:</strong> ${formatBytes(dailyBytesReceived)}</p>
-                    <p><strong>Today's Duration:</strong> ${formatDuration(dailyDuration)}</p>
-                `;
-                
-                // Add today's sessions table inside Today's tab
-                if (sessions && sessions.items && sessions.items.length > 0) {
-                    // Extract today's date without time for comparison
-                    const todayStr = today.toISOString().split('T')[0];
-                    
-                    // Filter sessions for today
-                    const todaySessions = sessions.items.filter(session => {
-                        const sessionDate = new Date(session.created_at).toISOString().split('T')[0];
-                        return sessionDate === todayStr;
-                    });
-                    
-                    // Sort sessions to show "New" status sessions at the top
-                    todaySessions.sort((a, b) => {
-                        if (a.status === 'New' && b.status !== 'New') return -1;
-                        if (a.status !== 'New' && b.status === 'New') return 1;
-                        return 0;
-                    });
-                    
-                    // If we have sessions today, display them in a table
-                    if (todaySessions.length > 0) {
-                        html += '<hr><h6 class="mt-4">Today\'s Sessions</h6>';
-                        html += '<div class="table-responsive">';
-                        html += '<table class="table table-sm table-striped">';
-                        html += '<thead><tr><th>ID</th><th>Created</th><th>Duration</th><th>Data Transferred</th><th>Earnings</th><th>Status</th></tr></thead>';
-                        html += '<tbody>';
-                        
-                        // Loop through each session and create a row
-                        todaySessions.forEach((session) => {
-                            const sessionId = session.id ? session.id.substring(0, 8) + '...' : 'Unknown';
-                            const createdAt = session.created_at ? new Date(session.created_at).toLocaleString() : 'Unknown';
-                            const duration = formatDuration(session.duration || 0);
-                            const bytesTransferred = (session.bytes_received || 0) + (session.bytes_sent || 0);
-                            const sessionTokens = ((session.tokens || 0) / (10**18)).toFixed(4);
+                        ${(() => {
+                            // Format today's date
+                            const today = new Date();
+                            const todayDate = today.toLocaleDateString('en-US', {
+                                weekday: 'long',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                            });
                             
-                            html += `
-                                <tr class="${session.status === 'New' ? 'table-warning' : ''}">
-                                    <td>${sessionId}</td>
-                                    <td>${createdAt}</td>
-                                    <td>${duration}</td>
-                                    <td>${formatBytes(bytesTransferred)}</td>
-                                    <td>${sessionTokens} MYST</td>
-                                    <td><span class="badge bg-${session.status === 'Completed' ? 'success' : 'warning'}">${session.status}</span></td>
-                                </tr>
-                            `;
-                        });
-                        
-                        html += '</tbody></table></div>';
-                    } else {
-                        html += '<hr><p>No sessions today</p>';
-                    }
-                }
-            } else {
-                html += `
-                    <p>No session statistics available for today</p>
-                `;
-            }
-            
-            html += `
+                            let dailyStatsHtml = `<h5 class="mb-3">${todayDate}</h5>`;
+                            
+                            // Try to get daily stats from API, if not available calculate from sessions
+                            let dailyStatsAvailable = (statsDaily && statsDaily.items && statsDaily.items.length > 0);
+                            let todayStats = null;
+                            
+                            // If no stats from the API, calculate from sessions
+                            if (!dailyStatsAvailable && sessions && sessions.items && sessions.items.length > 0) {
+                                // Extract today's date without time for comparison
+                                const todayStr = today.toISOString().split('T')[0];
+                                
+                                // Filter sessions for today
+                                const todaySessions = sessions.items.filter(session => {
+                                    const sessionDate = new Date(session.created_at).toISOString().split('T')[0];
+                                    return sessionDate === todayStr;
+                                });
+                                
+                                // If we have sessions today, calculate stats
+                                if (todaySessions.length > 0) {
+                                    let totalTokens = 0;
+                                    let totalBytesSent = 0;
+                                    let totalBytesReceived = 0;
+                                    let totalDuration = 0;
+                                    
+                                    todaySessions.forEach(session => {
+                                        totalTokens += parseFloat(session.tokens || 0);
+                                        totalBytesSent += parseInt(session.bytes_sent || 0);
+                                        totalBytesReceived += parseInt(session.bytes_received || 0);
+                                        totalDuration += parseInt(session.duration || 0);
+                                    });
+                                    
+                                    // Create a stats object like what the API would return
+                                    todayStats = {
+                                        count: todaySessions.length,
+                                        sumTokens: totalTokens,
+                                        sumBytesSent: totalBytesSent,
+                                        sumBytesReceived: totalBytesReceived,
+                                        sumDuration: totalDuration
+                                    };
+                                    
+                                    dailyStatsAvailable = true;
+                                }
+                            } else if (dailyStatsAvailable) {
+                                // Use the API-provided stats
+                                todayStats = statsDaily.items[0];
+                            }
+                            
+                            // Add today's stats if available (either from API or calculated)
+                            if (dailyStatsAvailable && todayStats) {
+                                const dailyTokens = (todayStats.sumTokens || 0) / (10**18);
+                                const dailyCount = todayStats.count || 0;
+                                const dailyBytesSent = todayStats.sumBytesSent || 0;
+                                const dailyBytesReceived = todayStats.sumBytesReceived || 0;
+                                const dailyDuration = todayStats.sumDuration || 0;
+                                
+                                dailyStatsHtml += `
+                                    <p><strong>Today's Sessions:</strong> ${dailyCount}</p>
+                                    <p><strong>Today's Earnings:</strong> ${dailyTokens.toFixed(4)} MYST</p>
+                                    <p><strong>Today's Bytes Sent:</strong> ${formatBytes(dailyBytesSent)}</p>
+                                    <p><strong>Today's Bytes Received:</strong> ${formatBytes(dailyBytesReceived)}</p>
+                                    <p><strong>Today's Duration:</strong> ${formatDuration(dailyDuration)}</p>
+                                `;
+                                
+                                // Add today's sessions table inside Today's tab
+                                if (sessions && sessions.items && sessions.items.length > 0) {
+                                    // Extract today's date without time for comparison
+                                    const todayStr = today.toISOString().split('T')[0];
+                                    
+                                    // Filter sessions for today
+                                    const todaySessions = sessions.items.filter(session => {
+                                        const sessionDate = new Date(session.created_at).toISOString().split('T')[0];
+                                        return sessionDate === todayStr;
+                                    });
+                                    
+                                    // Sort sessions to show "New" status sessions at the top
+                                    todaySessions.sort((a, b) => {
+                                        if (a.status === 'New' && b.status !== 'New') return -1;
+                                        if (a.status !== 'New' && b.status === 'New') return 1;
+                                        return 0;
+                                    });
+                                    
+                                    // If we have sessions today, display them in a table
+                                    if (todaySessions.length > 0) {
+                                        dailyStatsHtml += '<hr><h6 class="mt-4">Today\'s Sessions</h6>';
+                                        dailyStatsHtml += '<div class="table-responsive">';
+                                        dailyStatsHtml += '<table class="table table-sm table-striped">';
+                                        dailyStatsHtml += '<thead><tr><th>ID</th><th>Created</th><th>Duration</th><th>Data Transferred</th><th>Earnings</th><th>Status</th></tr></thead>';
+                                        dailyStatsHtml += '<tbody>';
+                                        
+                                        // Loop through each session and create a row
+                                        todaySessions.forEach((session) => {
+                                            const sessionId = session.id ? session.id.substring(0, 8) + '...' : 'Unknown';
+                                            const createdAt = session.created_at ? new Date(session.created_at).toLocaleString() : 'Unknown';
+                                            const duration = formatDuration(session.duration || 0);
+                                            const bytesTransferred = (session.bytes_received || 0) + (session.bytes_sent || 0);
+                                            const sessionTokens = ((session.tokens || 0) / (10**18)).toFixed(4);
+                                            
+                                            dailyStatsHtml += `
+                                                <tr class="${session.status === 'New' ? 'table-warning' : ''}">
+                                                    <td>${sessionId}</td>
+                                                    <td>${createdAt}</td>
+                                                    <td>${duration}</td>
+                                                    <td>${formatBytes(bytesTransferred)}</td>
+                                                    <td>${sessionTokens} MYST</td>
+                                                    <td><span class="badge bg-${session.status === 'Completed' ? 'success' : 'warning'}">${session.status}</span></td>
+                                                </tr>
+                                            `;
+                                        });
+                                        
+                                        dailyStatsHtml += '</tbody></table></div>';
+                                    } else {
+                                        dailyStatsHtml += '<hr><p>No sessions today</p>';
+                                    }
+                                }
+                            } else {
+                                dailyStatsHtml += '<p>No session statistics available for today</p>';
+                            }
+                            
+                            return dailyStatsHtml;
+                        })()}
                     </div>
                 </div>
             `;
@@ -485,24 +687,59 @@
         
         statsDiv.innerHTML = html;
     }
-    
+
     // Update identities list
     function updateIdentitiesList(identities) {
         const identitiesDiv = document.getElementById('identitiesList');
         
-        let html = '';
+        console.log("Identities data received:", identities);
+        
+        let html = '<h6 class="mb-3">Identities</h6>';
+        
+        // Check if identities exists and has the proper structure
         if (identities && identities.identities && identities.identities.length > 0) {
-            html += '<ul class="list-group">';
+            html += '<div class="list-group">';
+            
             identities.identities.forEach(identity => {
+                // Get registration status only if it's actually available and meaningful
+                const regStatus = identity.registration_status || '';
+                let statusBadge = '';
+                
+                if (regStatus && regStatus !== 'Unknown') {
+                    const statusClass = regStatus === 'Registered' ? 'success' : 
+                                       (regStatus === 'InProgress' ? 'warning' : 'secondary');
+                    statusBadge = `<span class="badge bg-${statusClass}">${regStatus}</span>`;
+                }
+                
+                // Format identity display
                 html += `
-                    <li class="list-group-item">
-                        ${identity.id}
-                    </li>
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <strong class="text-primary">Identity</strong>
+                            ${statusBadge}
+                        </div>
+                        <div class="mb-2 d-flex align-items-center">
+                            <span class="text-break text-monospace">${identity.id}</span>
+                            <button class="btn btn-sm btn-outline-secondary ms-2" 
+                                    onclick="navigator.clipboard.writeText('${identity.id}')">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <div class="small text-muted">
+                            ${identity.channel_address ? 
+                                `<span class="me-3"><i class="fas fa-tag me-1"></i> ${identity.channel_address}</span>` : ''}
+                            <span><i class="fas fa-clock me-1"></i> ${new Date(identity.created_at || Date.now()).toLocaleString()}</span>
+                        </div>
+                    </div>
                 `;
             });
-            html += '</ul>';
+            
+            html += '</div>';
         } else {
-            html += '<p>No identities available</p>';
+            html += '<div class="alert alert-info">';
+            html += '<p class="mb-0"><i class="fas fa-info-circle me-2"></i> No identities found</p>';
+            html += '<small>Your node must have at least one identity to operate. Check your node setup.</small>';
+            html += '</div>';
         }
         
         identitiesDiv.innerHTML = html;
@@ -511,115 +748,96 @@
     // Update node quality stats
     function updateNodeQualityStats(data) {
         const nodeQualityStatsDiv = document.getElementById('nodeQualityStats');
+        let html = '<h6 class="mb-3">Node Quality Statistics</h6>';
         
-        let html = '';
-        
-        // Convert uptime from string format (e.g., "1h 10m 30s") to hours
-        let uptimeHours = 0;
-        if (data.health && data.health.uptime) {
-            const uptimeParts = data.health.uptime.split(' ');
-            if (uptimeParts.length >= 3) {
-                const hours = parseInt(uptimeParts[0]) || 0;
-                const minutes = parseInt(uptimeParts[1]) || 0;
-                const seconds = parseInt(uptimeParts[2]) || 0;
-                uptimeHours = hours + (minutes / 60) + (seconds / 3600);
+        // Check if we have quality metrics from the discovery API
+        if (data && data.quality_metrics) {
+            const quality = data.quality_metrics;
+            
+            // Create a rating display with colored indicator
+            let qualityRating = 'Unknown';
+            let qualityClass = 'text-muted';
+            
+            if (quality.quality !== undefined) {
+                // Define rating based on quality score (scale 0-3)
+                if (quality.quality >= 2.5) {
+                    qualityRating = 'Excellent';
+                    qualityClass = 'text-success';
+                } else if (quality.quality >= 2.0) {
+                    qualityRating = 'Good';
+                    qualityClass = 'text-info';
+                } else if (quality.quality >= 1.5) {
+                    qualityRating = 'Average';
+                    qualityClass = 'text-primary';
+                } else if (quality.quality >= 1.0) {
+                    qualityRating = 'Poor';
+                    qualityClass = 'text-warning';
+                } else {
+                    qualityRating = 'Very Poor';
+                    qualityClass = 'text-danger';
+                }
             }
+            
+            // Display quality score with rating
+            html += `
+                <div class="mb-3">
+                    <p class="mb-1"><strong>Quality Score:</strong> <span class="${qualityClass}">${quality.quality?.toFixed(1) || 'N/A'}/3.0 (${qualityRating})</span></p>
+                    <div class="progress" style="height: 10px;">
+                        <div class="progress-bar bg-${qualityClass.replace('text-', '')}" 
+                             role="progressbar" 
+                             style="width: ${((quality.quality || 0) / 3) * 100}%"
+                             aria-valuenow="${quality.quality || 0}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="3">
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Create a list of detailed metrics with appropriate units
+            html += `
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Uptime:</strong> ${quality.uptime || 0}%</p>
+                        <p><strong>Latency:</strong> ${quality.latency?.toFixed(1) || 'N/A'} ms</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Bandwidth:</strong> ${quality.bandwidth?.toFixed(1) || 'N/A'} Mbps</p>
+                        <p><strong>Packet Loss:</strong> ${quality.packetLoss !== undefined ? quality.packetLoss + '%' : 'N/A'}</p>
+                    </div>
+                </div>
+            `;
+            
+            // Add location information if available
+            if (data.location_info) {
+                const location = data.location_info;
+                
+                html += `
+                    <hr class="my-3">
+                    <h6 class="mb-2">Node Location</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Country:</strong> ${location.country || 'Unknown'}</p>
+                            <p><strong>City:</strong> ${location.city || 'Unknown'}, ${location.region || ''}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>ISP:</strong> ${location.isp || 'Unknown'}</p>
+                            <p><strong>Type:</strong> ${location.ip_type ? location.ip_type.charAt(0).toUpperCase() + location.ip_type.slice(1) : 'Unknown'}</p>
+                        </div>
+                    </div>
+                `;
+            }
+        } else {
+            // No quality metrics available
+            html += `
+                <div class="alert alert-info">
+                    <p class="mb-0"><i class="fas fa-info-circle me-2"></i> No quality metrics available for this node.</p>
+                    <small>Metrics become available after the node has been running for some time.</small>
+                </div>
+            `;
         }
-        
-        // Calculate total bandwidth from session data if available
-        let bandwidthGB = 0;
-        if (data.stats && data.stats.stats) {
-            const totalBytes = (data.stats.stats.sum_bytes_sent || 0) + (data.stats.stats.sum_bytes_received || 0);
-            bandwidthGB = totalBytes / (1024 * 1024 * 1024); // Convert bytes to GB
-        }
-        
-        // Get quality metrics and location from the discovery API response
-        const quality = data.quality_metrics || {};
-        const location = data.location_info || {};
-        
-        // Create a table with all the quality metrics
-        html += `
-            <div class="table-responsive">
-                <table class="table table-bordered">
-                    <thead>
-                        <tr>
-                            <th>Metric</th>
-                            <th>Value</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>Quality</td>
-                            <td>${quality.quality !== undefined ? quality.quality.toFixed(1) : 'Unknown'}</td>
-                        </tr>
-                        <tr>
-                            <td>Latency (ms)</td>
-                            <td>${quality.latency !== undefined ? quality.latency.toFixed(2) : 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td>Uptime (hrs)</td>
-                            <td>${quality.uptime !== undefined ? quality.uptime : uptimeHours.toFixed(2)}</td>
-                        </tr>
-                        <tr>
-                            <td>Bandwidth (GB)</td>
-                            <td>${quality.bandwidth !== undefined ? quality.bandwidth.toFixed(2) : bandwidthGB.toFixed(2)}</td>
-                        </tr>
-                        <tr>
-                            <td>Packet Loss (%)</td>
-                            <td>${quality.packetLoss !== undefined ? quality.packetLoss.toFixed(2) : 'N/A'}</td>
-                        </tr>
-                        <tr>
-                            <td>IP Type</td>
-                            <td>${location.ip_type || 'Unknown'}</td>
-                        </tr>
-                        <tr>
-                            <td>Country</td>
-                            <td>${location.country || 'Unknown'}</td>
-                        </tr>
-                        <tr>
-                            <td>City</td>
-                            <td>${location.city || 'Unknown'}</td>
-                        </tr>
-                        <tr>
-                            <td>ISP</td>
-                            <td>${location.isp || 'Unknown'}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        `;
         
         nodeQualityStatsDiv.innerHTML = html;
-    }
-    
-    // Format bytes to human readable format
-    function formatBytes(bytes, decimals = 2) {
-        // Handle invalid values
-        if (bytes === undefined || bytes === null || isNaN(bytes) || bytes === 0) {
-            return '0 Bytes';
-        }
-        
-        const k = 1024;
-        const dm = decimals < 0 ? 0 : decimals;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-        
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        if (i < 0 || i >= sizes.length) return bytes + ' Bytes';
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-    }
-    
-    // Format duration in seconds to human readable format
-    function formatDuration(seconds) {
-        // Handle invalid values
-        if (seconds === undefined || seconds === null || isNaN(seconds)) {
-            return '0h 0m 0s';
-        }
-        
-        const secs = Math.floor(seconds % 60);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const hours = Math.floor(seconds / 3600);
-        
-        return `${hours}h ${minutes}m ${secs}s`;
     }
     
     // Update services list
@@ -703,12 +921,22 @@
         localStorage.setItem(`node_${nodeId}_services`, JSON.stringify(knownServices));
         
         // Render the services UI
-        let html = '';
+        let html = '<h6 class="mb-3">Active Services</h6>';
+        
         if (knownServices.length > 0) {
-            html += '<div class="table-responsive">';
-            html += '<table class="table table-striped">';
-            html += '<thead><tr><th>Type</th><th>ID</th><th>Status</th><th>Actions</th></tr></thead>';
-            html += '<tbody>';
+            html += `
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 35%">Service Type</th>
+                                <th style="width: 35%">ID</th>
+                                <th style="width: 15%">Status</th>
+                                <th style="width: 15%">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
             
             // Sort services by type according to predefined order
             const sortedServices = [...knownServices].sort((a, b) => {
@@ -719,25 +947,38 @@
             
             sortedServices.forEach(service => {
                 const isRunning = service.status === 'Running';
+                const serviceId = service.id || '';
+                // Display a shortened version of the ID if it's too long
+                const displayId = serviceId.length > 20 ? 
+                    serviceId.substring(0, 10) + '...' + serviceId.substring(serviceId.length - 8) : 
+                    serviceId;
+                
                 html += `
                     <tr>
                         <td>${getFriendlyName(service.type)}</td>
-                        <td>${service.id}</td>
+                        <td class="text-nowrap text-muted"><small>${displayId}</small></td>
                         <td><span class="badge bg-${isRunning ? 'success' : 'warning'}">${service.status}</span></td>
                         <td>
                             <div class="btn-group" role="group">
                                 <button type="button" class="btn btn-sm btn-success me-1 service-start-btn" 
                                     data-provider-id="${service.providerId}" 
                                     data-service-type="${service.type}" 
-                                    ${isRunning ? 'disabled' : ''}>Start</button>
+                                    title="Start service"
+                                    ${isRunning ? 'disabled' : ''}>
+                                    <i class="fas fa-play"></i>
+                                </button>
                                 <button type="button" class="btn btn-sm btn-danger service-stop-btn" 
                                     data-service-id="${service.id}" 
-                                    ${!isRunning ? 'disabled' : ''}>Stop</button>
+                                    title="Stop service"
+                                    ${!isRunning ? 'disabled' : ''}>
+                                    <i class="fas fa-stop"></i>
+                                </button>
                             </div>
                         </td>
                     </tr>
                 `;
             });
+            
             html += '</tbody></table></div>';
             
             // Add buttons for missing service types
@@ -746,34 +987,40 @@
             );
             
             if (missingTypes.length > 0 && providerId) {
-                html += '<div class="mt-3">';
+                html += '<div class="mt-4">';
                 html += '<h6>Start Additional Services:</h6>';
-                html += '<div class="d-flex flex-wrap gap-2">';
+                html += '<div class="d-flex flex-wrap gap-2 justify-content-center">';
                 
                 missingTypes.forEach(type => {
                     html += `
-                        <button type="button" class="btn btn-outline-success service-start-btn"
+                        <button type="button" class="btn btn-outline-success service-start-btn m-1"
                             data-provider-id="${providerId}" 
-                            data-service-type="${type}">Start ${getFriendlyName(type)}</button>
+                            data-service-type="${type}">
+                            <i class="fas fa-plus-circle me-1"></i> ${getFriendlyName(type)}
+                        </button>
                     `;
                 });
                 
                 html += '</div></div>';
             }
         } else {
-            html += '<p>No services running</p>';
+            html += '<div class="alert alert-info">';
+            html += '<p class="mb-0"><i class="fas fa-info-circle me-2"></i> No services running</p>';
+            html += '</div>';
             
             // If we have identities, show buttons for all service types
             if (providerId) {
-                html += '<div class="mt-3">';
+                html += '<div class="mt-4">';
                 html += '<h6>Start Services:</h6>';
-                html += '<div class="d-flex flex-wrap gap-2">';
+                html += '<div class="d-flex flex-wrap gap-2 justify-content-center">';
                 
                 serviceTypes.forEach(type => {
                     html += `
-                        <button type="button" class="btn btn-outline-success service-start-btn"
+                        <button type="button" class="btn btn-outline-success service-start-btn m-1"
                             data-provider-id="${providerId}" 
-                            data-service-type="${type}">Start ${getFriendlyName(type)}</button>
+                            data-service-type="${type}">
+                            <i class="fas fa-plus-circle me-1"></i> ${getFriendlyName(type)}
+                        </button>
                     `;
                 });
                 
@@ -800,121 +1047,47 @@
         });
     }
     
-    // Function to start a service - completely rewritten version
+    // Function to start a service
     function startService(providerId, serviceType) {
-        if (!providerId) {
-            alert("Error: Provider ID is missing. Please refresh the page and try again.");
-            return;
-        }
-        
-        // Clear existing service of this type
-        const serviceIndex = knownServices.findIndex(s => s.type === serviceType);
-        if (serviceIndex >= 0 && knownServices[serviceIndex].status === 'Stopped') {
-            console.log(`Removing stopped service of type ${serviceType} before starting new one`);
-            knownServices.splice(serviceIndex, 1);
-            localStorage.setItem(`node_${nodeId}_services`, JSON.stringify(knownServices));
-        }
-        
-        console.log(`Starting fresh ${serviceType} service with provider ID ${providerId}`);
-        
-        // Show loading state on all buttons for this service type
-        const startButtons = document.querySelectorAll(`.service-start-btn[data-service-type="${serviceType}"]`);
-        startButtons.forEach(btn => {
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...';
-        });
-        
-        // Simple, consistent payload format
-        const payload = {
-            provider_id: providerId,
-            type: serviceType
-        };
-        
-        console.log(`Sending service start request:`, payload);
-        
-        // Make the API call
-        fetch(`/node/${nodeId}/start_service`, {
+        fetch(`/node/${nodeId}/services`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ provider_id: providerId, service_type: serviceType })
         })
         .then(response => {
-            console.log(`Service start response status: ${response.status}`);
-            return response.text().then(text => {
-                // Try to parse as JSON, but keep text if it's not valid JSON
-                try {
-                    const json = JSON.parse(text);
-                    if (!response.ok) {
-                        throw new Error(json.error || `Failed with status ${response.status}`);
-                    }
-                    return json;
-                } catch (e) {
-                    if (!response.ok) {
-                        throw new Error(`Failed with status ${response.status}: ${text}`);
-                    }
-                    console.warn("Response wasn't valid JSON:", text);
-                    return { success: true };
-                }
-            });
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
         })
         .then(data => {
-            console.log("Service start success:", data);
-            
-            // Force a complete data reload rather than trying to update our local state
-            setTimeout(() => {
-                loadNodeData();
-                
-                // Reset buttons after reload
-                startButtons.forEach(btn => {
-                    btn.disabled = false;
-                    btn.textContent = `Start ${serviceType}`;
-                });
-            }, 2000);
+            console.log('Service started:', data);
+            loadNodeData();  // Reload data to reflect changes
         })
         .catch(error => {
             console.error('Error starting service:', error);
-            
-            // Reset buttons
-            startButtons.forEach(btn => {
-                btn.disabled = false;
-                btn.textContent = `Start ${serviceType}`;
-            });
-            
-            // Show error to user
-            alert(`Failed to start service: ${error.message}`);
-            
-            // Reload data to get current state
-            loadNodeData();
         });
     }
     
     // Function to stop a service
     function stopService(serviceId) {
-        const formData = new FormData();
-        formData.append('service_id', serviceId);
-        
-        fetch(`/node/${nodeId}/stop_service`, {
-            method: 'POST',
-            body: formData
+        fetch(`/node/${nodeId}/services/${serviceId}`, {
+            method: 'DELETE'
         })
         .then(response => {
             if (!response.ok) {
-                throw new Error('Failed to stop service');
+                throw new Error('Network response was not ok');
             }
-            return response;
+            return response.json();
         })
-        .then(() => {
-            // Wait a moment for the service to stop before refreshing
-            setTimeout(() => {
-                // Reload data to update UI with current state
-                loadNodeData();
-            }, 1000);
+        .then(data => {
+            console.log('Service stopped:', data);
+            loadNodeData();  // Reload data to reflect changes
         })
         .catch(error => {
             console.error('Error stopping service:', error);
-            alert('Failed to stop service. Please try again.');
         });
     }
     
@@ -926,9 +1099,20 @@
         
         let html = '';
         
-        // Filter active sessions (status = "New")
+        // Filter active sessions: status = "New" AND not older than 14 days
         const activeSessions = sessions && sessions.items ? 
-            sessions.items.filter(session => session.status === 'New') : [];
+            sessions.items.filter(session => {
+                if (session.status !== 'New') return false;
+                
+                // Filter out sessions older than 14 days (2 weeks)
+                const sessionDate = new Date(session.created_at);
+                const now = new Date();
+                const twoWeeksAgo = new Date(now.getTime() - (14 * 24 * 60 * 60 * 1000));
+                
+                return sessionDate >= twoWeeksAgo;
+            }) : [];
+        
+        console.log(`Found ${activeSessions.length} active sessions with status "New" created within the last 14 days`);
         
         // Update active sessions count
         activeSessionsCount.textContent = activeSessions.length;
@@ -941,30 +1125,40 @@
             html += '</div>';
             activeSessionsDiv.innerHTML = html;
         } else {
-            // Show loading indicator while we fetch real-time stats
+            // Show loading indicator while we prepare the data
             html = `
                 <div class="d-flex justify-content-center mb-3">
                     <div class="spinner-border spinner-border-sm text-warning me-2" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
-                    <span>Fetching real-time stats...</span>
+                    <span>Preparing session data...</span>
                 </div>
             `;
             activeSessionsDiv.innerHTML = html;
             
-            // Fetch real-time connection statistics
-            fetchConnectionStats();
+            // Directly display the active sessions we already have
+            displayActiveSessionsWithRealTimeData(activeSessions, {});
         }
     }
-    
-    // New function to fetch real-time connection statistics
+
+    // New function to fetch real-time connection statistics - updated to use the dedicated endpoint
     function fetchConnectionStats() {
-        // Get active sessions directly from the main data endpoint
-        fetch(`/node/${nodeId}/data`)
+        // Get active sessions from the dedicated endpoint that doesn't hit quality API
+        fetch(`/node/${nodeId}/active_sessions`)
             .then(response => response.json())
             .then(data => {
                 if (data.sessions && data.sessions.items) {
-                    const activeSessions = data.sessions.items.filter(session => session.status === 'New');
+                    // Filter active sessions: status = "New" AND not older than 14 days
+                    const activeSessions = data.sessions.items.filter(session => {
+                        if (session.status !== 'New') return false;
+                        
+                        // Filter out sessions older than 14 days (2 weeks)
+                        const sessionDate = new Date(session.created_at);
+                        const now = new Date();
+                        const twoWeeksAgo = new Date(now.getTime() - (14 * 24 * 60 * 60 * 1000));
+                        
+                        return sessionDate >= twoWeeksAgo;
+                    });
                     
                     if (activeSessions.length > 0) {
                         // Pass empty connection stats since that endpoint doesn't work for provider mode
@@ -1010,11 +1204,17 @@
             const now = new Date();
             const durationSeconds = Math.floor((now - startTime) / 1000);
             
+            // Calculate how old the session is
+            const hoursOld = Math.floor((now - startTime) / (60 * 60 * 1000));
+            const daysOld = Math.floor(hoursOld / 24);
+            
             // Initialize with data from the sessions endpoint
             sessionData[sessionId] = {
                 id: sessionId,
                 startTime: startTime,
                 durationSeconds: durationSeconds,
+                hoursOld: hoursOld,
+                daysOld: daysOld,
                 consumerCountry: session.consumer_country || 'Unknown'
             };
         });
@@ -1026,31 +1226,59 @@
                     <strong>${activeSessions.length} Active Sessions</strong>
                     <span class="badge bg-danger blink">LIVE</span>
                 </div>
+
                 <div class="small mb-2 text-danger">
                     <i class="fas fa-exclamation-triangle me-1"></i>
                     Real-time data transfer is not available from the Nodes API it is a limitation of the Mysterium nodes API.
                 </div>
+                <div class="small mb-2 text-danger">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    Some sessions may be stale if you have rebooted your node. This is a known issue with the Mysterium node software not cleaning up sessions properly.
+                </div>
             </div>
         `;
-        
+    
         // Create a table for active sessions
         html += '<div class="table-responsive">';
         html += '<table class="table table-hover table-sm" id="active-sessions-table">';
-        html += '<thead><tr><th>ID</th><th>Started</th><th>Duration</th><th>Consumer</th></tr></thead>';
+        html += '<thead><tr><th>ID</th><th>Started</th><th>Age</th><th>Duration</th><th>Consumer</th></tr></thead>';
         html += '<tbody>';
         
-        activeSessions.forEach(session => {
+        // Sort active sessions by age (newest first)
+        const sortedActiveSessions = [...activeSessions].sort((a, b) => {
+            const dateA = new Date(a.created_at || 0);
+            const dateB = new Date(b.created_at || 0);
+            return dateB - dateA; // Newest first
+        });
+        
+        sortedActiveSessions.forEach(session => {
             const sessionId = session.id;
             const displayId = sessionId ? sessionId.substring(0, 8) + '...' : 'Unknown';
             const startTime = sessionData[sessionId].startTime;
             const durationSeconds = sessionData[sessionId].durationSeconds;
             const duration = formatDuration(durationSeconds);
+            const hoursOld = sessionData[sessionId].hoursOld;
+            const daysOld = sessionData[sessionId].daysOld;
             const consumerCountry = sessionData[sessionId].consumerCountry;
             
+            // Format age display - show days if > 24 hours old
+            const ageDisplay = daysOld > 0 ? 
+                `${daysOld}d ${hoursOld % 24}h old` : 
+                `${hoursOld}h old`;
+            
+            // Add warning classes based on age
+            let rowClass = '';
+            if (daysOld >= 3) {
+                rowClass = 'table-danger'; // Red for very old sessions (3+ days)
+            } else if (daysOld >= 1) {
+                rowClass = 'table-warning'; // Yellow for older sessions (1-3 days)
+            }
+            
             html += `
-                <tr data-session-id="${sessionId}">
+                <tr data-session-id="${sessionId}" class="${rowClass}">
                     <td>${displayId}</td>
-                    <td>${startTime.toLocaleTimeString()}</td>
+                    <td>${startTime.toLocaleString()}</td>
+                    <td>${ageDisplay}</td>
                     <td class="session-duration">${duration}</td>
                     <td>${consumerCountry}</td>
                 </tr>
@@ -1091,10 +1319,11 @@
         // Add event listener for manual refresh button
         document.getElementById('manualRefreshStats').addEventListener('click', fetchConnectionStats);
     }
-    
+
     // Simplified function to update all session durations regularly
     function updateSessionDurations(sessionData) {
-        setInterval(() => {
+        // Create an interval that runs every second
+        const intervalId = setInterval(() => {
             const now = new Date();
             
             // Update each row's duration
@@ -1106,40 +1335,28 @@
                 // Update sessionData object
                 session.durationSeconds = durationSeconds;
                 
-                // Update row if it exists
+                // Update row if it exists in the DOM
                 const durationCell = document.querySelector(`#active-sessions-table tr[data-session-id="${sessionId}"] .session-duration`);
                 if (durationCell) {
                     durationCell.textContent = formatDuration(durationSeconds);
+                } else {
+                    // If the row no longer exists, this session might have ended
+                    // In this case, we should consider removing it from tracking
+                    console.log(`Session ${sessionId} duration cell not found in DOM, session may have ended`);
                 }
             }
+            
+            // Get active sessions count element to check if we should stop updating
+            const activeSessionsCount = document.getElementById('activeSessionsCount');
+            if (!activeSessionsCount || parseInt(activeSessionsCount.textContent) === 0) {
+                // No active sessions anymore, clear the interval to save resources
+                clearInterval(intervalId);
+                console.log("Cleared duration update interval: no active sessions");
+            }
         }, 1000); // Update every second
-    }
-    
-    // Refresh button click handler
-    document.getElementById('refreshBtn').addEventListener('click', loadNodeData);
-    
-    // Add event listener for active sessions refresh button
-    document.getElementById('refreshActiveBtn').addEventListener('click', function() {
-        // Show spinner during refresh
-        document.getElementById('activeSessionsStats').innerHTML = `
-            <div class="d-flex justify-content-center">
-                <div class="spinner-border text-warning" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-            </div>
-        `;
         
-        // Refresh data
-        loadNodeData();
-    });
-    
-    // Set up automatic refresh for active sessions every 5 seconds (more frequent than before)
-    setInterval(function() {
-        // Only refresh if there are active sessions
-        const activeCount = parseInt(document.getElementById('activeSessionsCount').textContent);
-        if (activeCount > 0) {
-            fetchConnectionStats();
-        }
-    }, 5000); // 5 seconds
+        // Return the interval ID in case we need to clear it elsewhere
+        return intervalId;
+    }
 </script>
 {% endblock %}

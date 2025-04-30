@@ -2,7 +2,9 @@
 
 A web-based dashboard for monitoring and managing multiple Mysterium Network nodes with detailed statistics, service management, and token information.
 
-<img src="https://i.imgur.com/tNs7WPV.png" alt="Mysterium Node Dashboard" width="750" />
+<img src="https://i.imgur.com/tNs7WPV.png" alt="Mysterium Node Dashboard" width="500" />
+<img src="https://i.imgur.com/nHBnf6p.png" alt="Mysterium Node Dashboard" width="500" />
+<img src="https://i.imgur.com/fZ9d74K.png" alt="Mysterium Node Dashboard" width="500" />
 
 ## Features
 
