@@ -724,6 +724,31 @@ def node_active_sessions(node_id):
         print(f"Error getting active sessions data: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+# Add this route to handle DELETE requests for stopping services
+@app.route('/node/<int:node_id>/services/<string:service_id>', methods=['DELETE'])
+def delete_service(node_id, service_id):
+    node = get_node_by_id(node_id)
+    if not node:
+        return jsonify({"error": "Node not found"}), 404
+    
+    try:
+        # Print debug information
+        print(f"\n=== Service Stop Request for Node {node_id} ===")
+        print(f"Stopping service with ID: {service_id}")
+        
+        # Initialize node API
+        node_api = NodeAPI(node['ip'], node['port'], node['token'])
+        
+        # Try to stop the service
+        result = node_api.stop_service(service_id)
+        
+        # Return success response
+        print(f"Service {service_id} stopped successfully")
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        print(f"Exception stopping service: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 @app.context_processor
 def inject_now():
     return {'now': datetime.now()}
