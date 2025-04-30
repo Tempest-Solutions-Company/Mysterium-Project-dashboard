@@ -227,6 +227,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
 <script>
     const nodeId = "{{ node.id }}";
+    const nodeIp = "{{ node.ip }}"; // Add this line to make node IP available to JavaScript
     
     // Add this variable to track services we've seen
     let knownServices = [];
@@ -1014,6 +1015,42 @@
             
             const visibleEarnings = (visibleSessionsStats.sumTokens / (10**18)).toFixed(4);
             
+            // Calculate Today's stats
+            let todayStats = {
+                count: 0,
+                tokens: 0,
+                bytes_sent: 0,
+                bytes_received: 0,
+                duration: 0
+            };
+            
+            // Get today's date at midnight for comparison
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Filter sessions for today only
+            let todaySessions = [];
+            if (sessions && sessions.items && sessions.items.length > 0) {
+                todaySessions = sessions.items.filter(session => {
+                    if (!session.created_at) return false;
+                    const sessionDate = new Date(session.created_at);
+                    return sessionDate >= today;
+                });
+                
+                todayStats.count = todaySessions.length;
+                
+                // Calculate today's stats
+                todaySessions.forEach(session => {
+                    todayStats.tokens += parseFloat(session.tokens || 0);
+                    todayStats.bytes_sent += parseInt(session.bytes_sent || 0);
+                    todayStats.bytes_received += parseInt(session.bytes_received || 0);
+                    todayStats.duration += parseInt(session.duration || 0);
+                });
+            }
+            
+            const todayEarnings = (todayStats.tokens / (10**18)).toFixed(4);
+            const todayDataTransfer = formatBytes(todayStats.bytes_sent + todayStats.bytes_received);
+            
             // Create tabs for All-time and Today's stats
             html += `
                 <ul class="nav nav-tabs mb-3" id="statsTab" role="tablist">
@@ -1081,11 +1118,92 @@
                         ` : ''}
                     </div>
                     <div class="tab-pane fade" id="today" role="tabpanel">
-                        ${(() => {
-                            // Create HTML for today's stats tab (same as before)
-                            // ...
-                            return 'Today tab content';
-                        })()}
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="mb-0">Today's Statistics (${new Date().toLocaleDateString()})</h6>
+                            </div>
+                            <div class="card-body">
+                                ${todayStats.count > 0 ? `
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="card mb-3">
+                                                <div class="card-body text-center">
+                                                    <h3 class="card-title">${todayStats.count}</h3>
+                                                    <p class="card-text text-muted">Sessions Today</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="card mb-3">
+                                                <div class="card-body text-center">
+                                                    <h3 class="card-title">${todayEarnings}</h3>
+                                                    <p class="card-text text-muted">MYST Earned Today</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="card mb-3">
+                                                <div class="card-body text-center">
+                                                    <h3 class="card-title">${todayDataTransfer}</h3>
+                                                    <p class="card-text text-muted">Data Transferred Today</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="card mb-3">
+                                                <div class="card-body text-center">
+                                                    <h3 class="card-title">${formatDuration(todayStats.duration)}</h3>
+                                                    <p class="card-text text-muted">Connection Time Today</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <hr class="my-4">
+                                    
+                                    <h6 class="mb-3">Today's Sessions</h6>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-striped">
+                                            <thead>
+                                                <tr>
+                                                    <th>ID</th>
+                                                    <th>Time</th>
+                                                    <th>Duration</th>
+                                                    <th>Data</th>
+                                                    <th>Earnings</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${todaySessions.map(session => {
+                                                    const sessionId = session.id ? session.id.substring(0, 8) + '...' : 'Unknown';
+                                                    const createdAt = session.created_at ? new Date(session.created_at).toLocaleTimeString() : 'Unknown';
+                                                    const duration = formatDuration(session.duration || 0);
+                                                    const bytesTransferred = (session.bytes_received || 0) + (session.bytes_sent || 0);
+                                                    const sessionTokens = ((session.tokens || 0) / (10**18)).toFixed(4);
+                                                    return `
+                                                        <tr class="${session.status === 'New' ? 'table-warning' : ''}">
+                                                            <td>${sessionId}</td>
+                                                            <td>${createdAt}</td>
+                                                            <td>${duration}</td>
+                                                            <td>${formatBytes(bytesTransferred)}</td>
+                                                            <td>${sessionTokens} MYST</td>
+                                                        </tr>
+                                                    `;
+                                                }).join('')}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ` : `
+                                    <div class="text-center py-5">
+                                        <i class="fas fa-calendar-day fa-4x text-muted mb-3"></i>
+                                        <h5>No Sessions Today</h5>
+                                        <p class="text-muted">There haven't been any sessions recorded today.</p>
+                                    </div>
+                                `}
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -1206,7 +1324,7 @@
             html += `
                 <div class="row">
                     <div class="col-md-6">
-                        <p><strong>Uptime:</strong> ${quality.uptime || 0}%</p>
+                        <p><strong>Uptime:</strong> ${quality.uptime || 0} hrs</p>
                         <p><strong>Latency:</strong> ${quality.latency?.toFixed(1) || 'N/A'} ms</p>
                     </div>
                     <div class="col-md-6">
@@ -1216,10 +1334,46 @@
                 </div>
             `;
             
+            // Add location and IP information section
+            html += `<hr class="my-3">`;
+            
             // Add location information if available
-            if (data.location_info) {
-                // ...existing code...
-            }
+            const location = data.location_info || {};
+            const ipInfo = data.ip_info || {};
+            
+            html += `
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3">
+                            <i class="fas fa-map-marker-alt me-2 text-danger"></i>
+                            Node Location & Network Information
+                        </h6>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Country:</strong> ${location.country || 'Unknown'}</p>
+                                <p><strong>City:</strong> ${location.city || 'Unknown'}</p>
+                                <p><strong>ISP:</strong> ${location.isp || 'Unknown'}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>IP Type:</strong> ${data.nat_info?.type ? data.nat_info.type.toUpperCase() : 'Unknown'}</p>
+                                <p><strong>Continent:</strong> ${location.continent || 'Unknown'}</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Optional: Add a map link if we have coordinates -->
+                        ${(location.latitude && location.longitude) ? `
+                            <div class="text-center mt-2">
+                                <a href="https://www.google.com/maps?q=${location.latitude},${location.longitude}" 
+                                   target="_blank" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-map me-1"></i> View on Map
+                                </a>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
         } else {
             // No quality metrics available
             html += `
