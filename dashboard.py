@@ -48,6 +48,19 @@ def get_node_by_id(node_id):
             return node
     return None
 
+# Add a helper function to check if a node name already exists
+def node_name_exists(name):
+    nodes = get_nodes()
+    return any(node.get('name') == name for node in nodes)
+
+def get_lowest_available_id(nodes):
+    """Find the lowest available ID that can be used for a new node"""
+    used_ids = set(node.get('id', 0) for node in nodes)
+    id = 1
+    while id in used_ids:
+        id += 1
+    return id
+
 # Node API service
 class NodeAPI:
     def __init__(self, ip, port, token=None):
@@ -280,6 +293,11 @@ def add_node():
             flash('Name and IP are required fields', 'danger')
             return redirect(url_for('index'))
         
+        # Check if node name already exists
+        if node_name_exists(name):
+            flash(f'A node with the name "{name}" already exists. Please use a unique name.', 'danger')
+            return redirect(url_for('index'))
+        
         # Check connection and authenticate
         try:
             node_api = NodeAPI(ip, port)
@@ -287,7 +305,7 @@ def add_node():
             
             nodes = get_nodes()
             new_node = {
-                'id': len(nodes) + 1,
+                'id': get_lowest_available_id(nodes),  # Use lowest available ID
                 'name': name,
                 'ip': ip,
                 'port': port,
