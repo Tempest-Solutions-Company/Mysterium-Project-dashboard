@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 import requests
 from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session
 
-# Create templates directory if it doesn't exist
 templates_dir = os.path.join(os.path.dirname(__file__), 'templates')
 static_dir = os.path.join(os.path.dirname(__file__), 'static')
 
@@ -24,7 +23,6 @@ app = Flask(__name__,
 app.secret_key = 'mysterium-node-dashboard-secret-key'
 NODES_FILE = 'nodes.json'
 
-# Ensure the data file exists
 if not os.path.exists(NODES_FILE):
     with open(NODES_FILE, 'w') as f:
         json.dump([], f)
@@ -350,7 +348,7 @@ def node_data(node_id):
         
         # Get session data with increased limit (get more history for charts)
         # Default is 50, let's request as many as needed for 30+ days of data
-        sessions = node_api.sessions({"page_size": 1000}) # Increase page size to get more sessions
+        sessions = node_api.sessions({"page_size": 1000})
         
         # Get NAT status info
         nat_info = node_api.nat_status()
