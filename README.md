@@ -6,6 +6,7 @@ A web-based dashboard for monitoring and managing multiple Mysterium Network nod
 <img src="https://i.imgur.com/nHBnf6p.png" alt="Mysterium Node Dashboard" width="500" />
 <img src="https://i.imgur.com/fZ9d74K.png" alt="Mysterium Node Dashboard" width="500" />
 <img src="https://i.imgur.com/B78NmL5.png" alt="Mysterium Node Dashboard" width="500" />
+<img src="https://i.imgur.com/a1LwWn9.png" alt="Mysterium Node Dashboard" width="500" />
 
 ## Features
 
