@@ -1,0 +1,83 @@
+title: Node Migration Guide
+description: How to migrate your Mysterium Node to a new device while preserving your identity and earnings.
+content_sections:
+  - heading: Before You Start
+    content: |-
+      **Important**: Migration preserves your node's identity and earnings history, but does NOT transfer your unclaimed balance. Make sure to claim any funds before migrating!
+      
+      You'll need:
+      - Access to both your old and new devices
+      - Your node identity backup (or access to the old node)
+      - A new device with supported OS (Linux/Windows/Mac/RaspberryPi)
+
+  - heading: Step 1: Back Up Your Identity
+    content: |-
+      On your old node, access the backup:
+      
+      **Via Web UI** (recommended):
+      1. Open the web UI at http://[node-ip]:4449/
+      2. Go to Settings → Backup
+      3. Click "Download" to save your backup file
+      
+      **Via CLI** (advanced users):
+      ```
+      myst cli
+      > identities list
+      > identities get [identity] --backup
+      ```
+      
+      Save the resulting backup file securely.
+
+  - heading: Step 2: Stop the Old Node
+    content: |-
+      Before migrating, properly stop your old node:
+      
+      **For Docker installations:**
+      ```
+      docker stop myst
+      ```
+      
+      **For Linux native installations:**
+      ```
+      sudo systemctl stop mysterium-node
+      ```
+      
+      **For Windows/macOS:**
+      Stop the service from the system tray or services panel
+
+  - heading: Step 3: Install Mysterium on New Device
+    content: |-
+      Install the Mysterium Node on your new device using any of the available installation methods:
+      
+      - Docker: Use `/help topic docker_install`
+      - Linux: Use `/help topic linux_install`
+      - Or download the app from mystnodes.com
+      
+      **Important:** Don't complete the initial setup yet! Stop after installation.
+
+  - heading: Step 4: Restore Your Identity
+    content: |-
+      **Via Web UI:**
+      1. Access the UI at http://[new-node-ip]:4449/
+      2. During initial setup, select "Import Existing Identity"
+      3. Upload your backup file and enter your password
+      
+      **Via CLI (advanced):**
+      ```
+      myst cli
+      > identities import [path-to-backup-file]
+      ```
+
+  - heading: Step 5: Complete Setup
+    content: |-
+      After restoring your identity:
+      
+      1. Complete the configuration steps for your new node
+      2. Verify your node is visible in the proposal list
+      3. Check that your earnings history is preserved
+      
+      **Note:** It may take up to 24 hours for your node to fully reconnect to the network and appear in discovery.
+
+color: blue
+thumbnail_url: ""
+footer: "For detailed instructions, visit https://help.mystnodes.com/en/articles/8005511-migrating-your-node"

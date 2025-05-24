@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}Help Center - Mysterium Node Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>Mysterium Help Center</h1>
+            <p class="lead">Find answers to common questions about running your Mysterium nodes.</p>
+        </div>
+    </div>
+
+    <div class="row mb-5">
+        <div class="col-lg-8">
+            <div class="input-group mb-3">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" class="form-control" id="helpSearch" placeholder="Search help topics...">
+            </div>
+        </div>
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="helpTopics">
+        {% for topic in topics %}
+        <div class="col">
+            <div class="card h-100 help-topic" data-topic="{{ topic.title|lower }} {{ topic.description|lower }}">
+                <!-- Set default color to primary (blue) when not specified -->
+                <div class="card-header bg-{{ topic.color|default('primary') }}">
+                    <h5 class="card-title text-white mb-0">{{ topic.title }}</h5>
+                </div>
+                <div class="card-body d-flex flex-column">
+                    {% if topic.thumbnail_url %}
+                    <img src="{{ topic.thumbnail_url }}" class="mb-3 rounded" alt="{{ topic.title }}">
+                    {% endif %}
+                    <p class="card-text flex-grow-1">{{ topic.description }}</p>
+                    <!-- Set consistent button styling -->
+                    <a href="{{ url_for('help_topic', topic_id=topic.id) }}" class="btn btn-outline-{{ topic.color|default('primary') }} mt-auto">
+                        Read More
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    {% if not topics %}
+    <div class="alert alert-info">
+        <p>No help topics are available yet. Please check back later.</p>
+    </div>
+    {% else %}
+    <div class="mt-4">
+        <p class="text-muted"><i class="fas fa-info-circle me-2"></i> Found {{ topics|length }} help topics available.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Apply consistent styling to help topic cards
+        document.querySelectorAll('.help-topic').forEach(card => {
+            // Ensure headers have hover effect
+            const header = card.querySelector('.card-header');
+            if (header && !header.classList.contains('bg-primary') && !header.classList.contains('bg-success')) {
+                header.classList.remove(...Array.from(header.classList).filter(c => c.startsWith('bg-')));
+                header.classList.add('bg-primary');
+            }
+            
+            // Ensure buttons have proper styling
+            const button = card.querySelector('.btn');
+            if (button && !button.classList.contains('btn-outline-primary') && !button.classList.contains('btn-outline-success')) {
+                button.classList.remove(...Array.from(button.classList).filter(c => c.startsWith('btn-outline-')));
+                button.classList.add('btn-outline-primary');
+            }
+        });
+
+        const searchInput = document.getElementById('helpSearch');
+        const helpTopics = document.querySelectorAll('.help-topic');
+        
+        searchInput.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            
+            helpTopics.forEach(topic => {
+                const topicText = topic.getAttribute('data-topic');
+                
+                // Show/hide based on search term
+                if (searchTerm === '' || topicText.includes(searchTerm)) {
+                    topic.closest('.col').style.display = '';
+                } else {
+                    topic.closest('.col').style.display = 'none';
+                }
+            });
+        });
+    });
+</script>
+
+<style>
+    /* Ensure consistent styling for help topic cards */
+    .help-topic .card-header {
+        transition: all 0.3s ease;
+    }
+    
+    .help-topic:hover .card-header {
+        padding-top: 15px;
+        padding-bottom: 15px;
+    }
+    
+    .help-topic .card {
+        border: 1px solid rgba(0, 0, 0, 0.125);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .help-topic:hover .card {
+        transform: translateY(-5px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .help-topic .btn-outline-primary {
+        border-width: 2px;
+        font-weight: 500;
+    }
+</style>
+{% endblock %}

@@ -3,6 +3,10 @@ import json
 from datetime import datetime, timedelta
 import requests
 from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, session
+import yaml
+import markdown
+import re
+import logging
 
 templates_dir = os.path.join(os.path.dirname(__file__), 'templates')
 static_dir = os.path.join(os.path.dirname(__file__), 'static')
@@ -11,6 +15,7 @@ if not os.path.exists(templates_dir):
     os.makedirs(templates_dir)
     os.makedirs(os.path.join(templates_dir, 'dashboard'))
     os.makedirs(os.path.join(templates_dir, 'node'))
+    os.makedirs(os.path.join(templates_dir, 'help'))
 
 if not os.path.exists(static_dir):
     os.makedirs(static_dir)
@@ -27,7 +32,6 @@ if not os.path.exists(NODES_FILE):
     with open(NODES_FILE, 'w') as f:
         json.dump([], f)
 
-# Helper functions for node data
 def get_nodes():
     try:
         with open(NODES_FILE, 'r') as f:
@@ -46,7 +50,6 @@ def get_node_by_id(node_id):
             return node
     return None
 
-# Add a helper function to check if a node name already exists
 def node_name_exists(name):
     nodes = get_nodes()
     return any(node.get('name') == name for node in nodes)
@@ -59,7 +62,6 @@ def get_lowest_available_id(nodes):
         id += 1
     return id
 
-# Node API service
 class NodeAPI:
     def __init__(self, ip, port, token=None):
         self.base_url = f"http://{ip}:{port}/tequilapi"
@@ -68,9 +70,7 @@ class NodeAPI:
         if token:
             self.headers['Authorization'] = f'Bearer {token}'
     
-    # Authentication method to get token
     def authenticate(self, password):
-        import requests
         url = f"{self.base_url}/auth/authenticate"
         data = {'username': 'myst', 'password': password}
         try:
@@ -83,9 +83,7 @@ class NodeAPI:
         except Exception as e:
             raise Exception(f"Authentication failed: {str(e)}")
     
-    # Health check method
     def health_check(self):
-        import requests
         try:
             response = requests.get(f"{self.base_url}/healthcheck", headers=self.headers)
             response.raise_for_status()
@@ -93,9 +91,7 @@ class NodeAPI:
         except Exception as e:
             raise Exception(f"Health check failed: {str(e)}")
     
-    # Session stats method
     def session_stats(self):
-        import requests
         try:
             response = requests.get(f"{self.base_url}/sessions/stats-aggregated", headers=self.headers)
             response.raise_for_status()
@@ -103,9 +99,7 @@ class NodeAPI:
         except Exception as e:
             raise Exception(f"Failed to get session stats: {str(e)}")
     
-    # Session stats daily method
     def session_stats_daily(self, query=None):
-        import requests
         try:
             response = requests.get(f"{self.base_url}/sessions/stats-daily", headers=self.headers, params=query)
             response.raise_for_status()
@@ -113,9 +107,7 @@ class NodeAPI:
         except Exception as e:
             raise Exception(f"Failed to get daily session stats: {str(e)}")
     
-    # Sessions list method
     def sessions(self, query=None):
-        import requests
         try:
             response = requests.get(f"{self.base_url}/sessions", headers=self.headers, params=query)
             response.raise_for_status()
@@ -123,9 +115,7 @@ class NodeAPI:
         except Exception as e:
             raise Exception(f"Failed to get sessions: {str(e)}")
     
-    # Identity list method
     def identity_list(self):
-        import requests
         try:
             response = requests.get(f"{self.base_url}/identities", headers=self.headers)
             response.raise_for_status()
@@ -133,9 +123,7 @@ class NodeAPI:
         except Exception as e:
             raise Exception(f"Failed to get identities: {str(e)}")
     
-    # Service list method
     def service_list(self):
-        import requests
         try:
             response = requests.get(f"{self.base_url}/services", headers=self.headers)
             response.raise_for_status()
@@ -143,12 +131,9 @@ class NodeAPI:
         except Exception as e:
             raise Exception(f"Failed to get services: {str(e)}")
     
-    # Start service method
     def start_service(self, request):
-        import requests
         try:
             print(f"Starting service with request: {request}")
-            # Send the complete request object to the API
             response = requests.post(
                 f"{self.base_url}/services", 
                 json=request, 
@@ -160,9 +145,7 @@ class NodeAPI:
             print(f"Service start error details: {str(e)}")
             raise Exception(f"Failed to start service: {str(e)}")
 
-    # Stop service method
     def stop_service(self, service_id):
-        import requests
         try:
             response = requests.delete(f"{self.base_url}/services/{service_id}", headers=self.headers)
             response.raise_for_status()
@@ -170,21 +153,16 @@ class NodeAPI:
         except Exception as e:
             raise Exception(f"Failed to stop service: {str(e)}")
     
-    # Connection statistics method for active sessions
     def connection_statistics(self):
-        import requests
         try:
             response = requests.get(f"{self.base_url}/connection/statistics", headers=self.headers)
             response.raise_for_status()
             return response.json()
         except Exception as e:
             print(f"Failed to get connection statistics: {str(e)}")
-            # Return empty stats instead of raising error
             return {"bytesReceived": 0, "bytesSent": 0, "duration": 0, "tokensSpent": 0}
     
-    # Get individual session data
     def session_by_id(self, session_id):
-        import requests
         try:
             response = requests.get(f"{self.base_url}/sessions/{session_id}", headers=self.headers)
             response.raise_for_status()
@@ -193,13 +171,10 @@ class NodeAPI:
             print(f"Failed to get session by ID: {str(e)}")
             return None
     
-    # Add NAT detection method
     def nat_status(self):
-        import requests
         try:
             nat_info = {}
             
-            # Try the nat/type endpoint first since it seems more reliable
             try:
                 response = requests.get(f"{self.base_url}/nat/type", headers=self.headers)
                 if response.status_code == 200:
@@ -207,11 +182,9 @@ class NodeAPI:
                     if nat_type_info:
                         print("NAT type obtained from /nat/type endpoint")
                         
-                        # Use type information from this endpoint
                         if 'type' in nat_type_info:
                             nat_info['type'] = nat_type_info['type']
                         
-                        # Add any other relevant fields
                         for key in ['status', 'error']:
                             if key in nat_type_info:
                                 nat_info[key] = nat_type_info[key]
@@ -220,22 +193,18 @@ class NodeAPI:
             except Exception as e:
                 print(f"Failed to get NAT type from nat/type endpoint: {str(e)}")
             
-            # If we have NAT info, add a status if it's missing
             if nat_info and 'type' in nat_info and 'status' not in nat_info:
-                nat_info['status'] = 'finished'  # Assume it's finished if we have a type
+                nat_info['status'] = 'finished'
             
-            # If we have any NAT info, return it
             if nat_info:
                 return nat_info
                 
-            # As a fallback, try to determine NAT from proposal
             try:
                 response = requests.get(f"{self.base_url}/proposals", headers=self.headers)
                 response.raise_for_status()
                 proposals = response.json()
                 
                 if proposals and len(proposals) > 0:
-                    # NAT info can sometimes be found in the proposal
                     nat_type = proposals[0].get('nat_compatibility')
                     if nat_type:
                         print(f"NAT information extracted from proposals: {nat_type}")
@@ -246,7 +215,6 @@ class NodeAPI:
             except Exception as e:
                 print(f"Failed to get NAT info from proposals: {str(e)}")
                 
-            # As another fallback, create a basic NAT status
             return {
                 'type': 'unknown',
                 'status': 'unavailable'
@@ -258,9 +226,7 @@ class NodeAPI:
                 'status': 'error'
             }
 
-    # Add monitoring status method
     def node_monitoring_status(self):
-        import requests
         try:
             response = requests.get(f"{self.base_url}/node/monitoring-status", headers=self.headers)
             if response.status_code == 200:
@@ -272,7 +238,15 @@ class NodeAPI:
             print(f"Failed to get node monitoring status: {str(e)}")
             return None
 
-# Routes
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
 @app.route('/')
 def index():
     nodes = get_nodes()
@@ -286,24 +260,21 @@ def add_node():
         port = request.form.get('port', 4449)
         password = request.form.get('password')
         
-        # Validate form data
         if not name or not ip:
             flash('Name and IP are required fields', 'danger')
             return redirect(url_for('index'))
         
-        # Check if node name already exists
         if node_name_exists(name):
             flash(f'A node with the name "{name}" already exists. Please use a unique name.', 'danger')
             return redirect(url_for('index'))
         
-        # Check connection and authenticate
         try:
             node_api = NodeAPI(ip, port)
             token = node_api.authenticate(password)
             
             nodes = get_nodes()
             new_node = {
-                'id': get_lowest_available_id(nodes),  # Use lowest available ID
+                'id': get_lowest_available_id(nodes),
                 'name': name,
                 'ip': ip,
                 'port': port,
@@ -339,78 +310,68 @@ def node_data(node_id):
     try:
         node_api = NodeAPI(node['ip'], node['port'], node['token'])
         
-        # Get node data
         health = node_api.health_check()
         stats = node_api.session_stats()
         stats_daily = node_api.session_stats_daily()
         services = node_api.service_list()
         identities = node_api.identity_list()
         
-        # Get session data with increased limit (get more history for charts)
-        # Default is 50, let's request as many as needed for 30+ days of data
         sessions = node_api.sessions({"page_size": 1000})
         
-        # Get NAT status info
         nat_info = node_api.nat_status()
-        print("\n=== NAT Status Info ===")
+        logger.info("\n=== NAT Status Info ===")
         if nat_info:
-            print(f"Raw NAT status: {json.dumps(nat_info, indent=2)}")
+            logger.info(f"Raw NAT status: {json.dumps(nat_info, indent=2)}")
         else:
-            # If we don't have NAT info, create a placeholder
-            print("NAT status unavailable, creating placeholder")
+            logger.info("NAT status unavailable, creating placeholder")
             nat_info = {
                 'type': 'unknown',
                 'status': 'unavailable'
             }
-        print("=====================\n")
+        logger.info("=====================\n")
         
-        # Get node monitoring status
         monitoring_status = node_api.node_monitoring_status()
-        print("\n=== Node Monitoring Status ===")
+        logger.info("\n=== Node Monitoring Status ===")
         if monitoring_status:
-            print(f"Monitoring status: {json.dumps(monitoring_status, indent=2)}")
+            logger.info(f"Monitoring status: {json.dumps(monitoring_status, indent=2)}")
         else:
-            print("Node monitoring status unavailable")
+            logger.info("Node monitoring status unavailable")
             monitoring_status = {"status": "unknown"}
-        print("==========================\n")
+        logger.info("==========================\n")
         
-        # Fetch quality metrics from Mysterium discovery API if identities are available
         quality_metrics = None
         location_info = None
         if identities and 'identities' in identities and len(identities['identities']) > 0:
-            provider_id = identities['identities'][0]['id']  # Use the first identity
+            provider_id = identities['identities'][0]['id']
             try:
                 import requests
-                print(f"Fetching quality metrics from discovery API for provider {provider_id}")
+                logger.info(f"Fetching quality metrics from discovery API for provider {provider_id}")
                 discovery_url = f"https://discovery.mysterium.network/api/v4/proposals?access_policy=all&provider_id={provider_id}"
                 discovery_response = requests.get(discovery_url, timeout=5)
                 if discovery_response.status_code == 200:
                     discovery_data = discovery_response.json()
                     if discovery_data and len(discovery_data) > 0:
-                        # Extract quality metrics and location from the first proposal
                         quality_metrics = discovery_data[0].get('quality', {})
                         location_info = discovery_data[0].get('location', {})
-                        print(f"Found quality metrics for provider {provider_id}: {quality_metrics}")
-                        print(f"Found location info for provider {provider_id}: {location_info}")
+                        logger.info(f"Found quality metrics for provider {provider_id}: {quality_metrics}")
+                        logger.info(f"Found location info for provider {provider_id}: {location_info}")
             except Exception as e:
-                print(f"Error fetching discovery data: {str(e)}")
+                logger.warning(f"Error fetching discovery data: {str(e)}")
         
-        # Debug: Log raw stats data to terminal
-        print("\n=== Session Stats Data ===")
-        print(f"Raw stats response: {json.dumps(stats, indent=2)}")
+        logger.info("\n=== Session Stats Data ===")
+        logger.info(f"Raw stats response: {json.dumps(stats, indent=2)}")
         if 'stats' in stats:
-            print(f"Stats object keys: {list(stats['stats'].keys())}")
+            logger.info(f"Stats object keys: {list(stats['stats'].keys())}")
             for key, value in stats['stats'].items():
-                print(f"  {key}: {value}")
+                logger.info(f"  {key}: {value}")
         else:
-            print("No 'stats' key in stats response")
-        print("===========================\n")
+            logger.info("No 'stats' key in stats response")
+        logger.info("===========================\n")
         
-        # Log only session count instead of detailed data
         if sessions and 'items' in sessions:
-            print(f"\nSession count for node {node_id}: {len(sessions['items'])}")
+            logger.info(f"\nSession count for node {node_id}: {len(sessions['items'])}")
         else:
-            print(f"\nNo sessions data available for node {node_id}")
+            logger.info(f"\nNo sessions data available for node {node_id}")
         
         return jsonify({
             'health': health,
@@ -425,7 +386,7 @@ def node_data(node_id):
             'monitoring_status': monitoring_status
         })
     except Exception as e:
-        print(f"Error getting node data: {str(e)}")
+        logger.error(f"Error getting node data: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/node/<int:node_id>/start_service', methods=['POST'])
@@ -434,32 +395,28 @@ def start_service(node_id):
     if not node:
         return jsonify({"error": "Node not found"}), 404
     
-    # Detailed request logging
-    print(f"\n=== Service Start Request for Node {node_id} ===")
-    print(f"Request Content-Type: {request.headers.get('Content-Type')}")
-    print(f"Request method: {request.method}")
+    logger.info(f"\n=== Service Start Request for Node {node_id} ===")
+    logger.info(f"Request Content-Type: {request.headers.get('Content-Type')}")
+    logger.info(f"Request method: {request.method}")
     
     try:
-        # Parse request data
         if request.is_json:
             data = request.json
-            print(f"Received JSON data: {data}")
+            logger.info(f"Received JSON data: {data}")
         else:
             data = request.form.to_dict()
-            print(f"Received form data: {data}")
+            logger.info(f"Received form data: {data}")
         
-        # Extract service type and provider ID
         service_type = data.get('type')
         provider_id = data.get('provider_id')
         
-        print(f"Extracted: service_type={service_type}, provider_id={provider_id}")
+        logger.info(f"Extracted: service_type={service_type}, provider_id={provider_id}")
         
         if not service_type:
             return jsonify({"error": "Service type is required"}), 400
         
         if not provider_id:
-            print("No provider_id in request, getting from identities API")
-            # Get identities to find a provider ID if not provided
+            logger.info("No provider_id in request, getting from identities API")
             node_api = NodeAPI(node['ip'], node['port'], node['token'])
             identities = node_api.identity_list()
             
@@ -467,27 +424,23 @@ def start_service(node_id):
                 return jsonify({"error": "No identities found on node"}), 400
             
             provider_id = identities['identities'][0]['id']
-            print(f"Using provider_id from identity: {provider_id}")
+            logger.info(f"Using provider_id from identity: {provider_id}")
         
-        # Create service request with exact format required by API
         service_request = {
             "provider_id": provider_id,
             "type": service_type
         }
         
-        print(f"Final service request payload: {service_request}")
+        logger.info(f"Final service request payload: {service_request}")
         
-        # Initialize node API
         node_api = NodeAPI(node['ip'], node['port'], node['token'])
         
-        # Add headers logging to NodeAPI
         node_api.headers['Content-Type'] = 'application/json'
-        print(f"Request headers: {node_api.headers}")
+        logger.info(f"Request headers: {node_api.headers}")
         
-        # Direct HTTP request with detailed logging
         import json
         url = f"{node_api.base_url}/services"
-        print(f"Making POST request to: {url}")
+        logger.info(f"Making POST request to: {url}")
         
         response = requests.post(
             url,
@@ -495,32 +448,30 @@ def start_service(node_id):
             data=json.dumps(service_request)
         )
         
-        print(f"Response status: {response.status_code}")
-        print(f"Response headers: {response.headers}")
+        logger.info(f"Response status: {response.status_code}")
+        logger.info(f"Response headers: {response.headers}")
         
         try:
             response_text = response.text
-            print(f"Response text: {response_text}")
+            logger.info(f"Response text: {response_text}")
             response_json = response.json()
-            print(f"Response JSON: {response_json}")
+            logger.info(f"Response JSON: {response_json}")
         except Exception as e:
-            print(f"Could not parse response as JSON: {e}")
+            logger.warning(f"Could not parse response as JSON: {e}")
             response_json = None
         
-        # Handle response appropriately
         if response.status_code == 200 or response.status_code == 201:
-            # Success - return service data
             if response_json:
                 return jsonify({"success": True, "service": response_json})
             else:
                 return jsonify({"success": True})
         else:
             error_msg = response_json.get('error', {}).get('message') if response_json else response.text
-            print(f"Error starting service: {error_msg}")
+            logger.error(f"Error starting service: {error_msg}")
             return jsonify({"error": f"Failed to start service: {error_msg}"}), response.status_code
                  
     except Exception as e:
-        print(f"Exception starting service: {str(e)}")
+        logger.error(f"Exception starting service: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/node/<int:node_id>/stop_service', methods=['POST'])
@@ -541,39 +492,34 @@ def stop_service(node_id):
     
     return redirect(url_for('node_details', node_id=node_id))
 
-# Add new route to handle service creation via POST request to /services
 @app.route('/node/<int:node_id>/services', methods=['POST'])
 def create_service(node_id):
     node = get_node_by_id(node_id)
     if not node:
         return jsonify({"error": "Node not found"}), 404
     
-    # Detailed request logging
-    print(f"\n=== Service Create Request for Node {node_id} ===")
-    print(f"Request Content-Type: {request.headers.get('Content-Type')}")
-    print(f"Request method: {request.method}")
+    logger.info(f"\n=== Service Create Request for Node {node_id} ===")
+    logger.info(f"Request Content-Type: {request.headers.get('Content-Type')}")
+    logger.info(f"Request method: {request.method}")
     
     try:
-        # Parse request data
         if request.is_json:
             data = request.json
-            print(f"Received JSON data: {data}")
+            logger.info(f"Received JSON data: {data}")
         else:
             data = request.form.to_dict()
-            print(f"Received form data: {data}")
+            logger.info(f"Received form data: {data}")
         
-        # Extract service type and provider ID (different field names from JavaScript)
         service_type = data.get('service_type')
         provider_id = data.get('provider_id')
         
-        print(f"Extracted: service_type={service_type}, provider_id={provider_id}")
+        logger.info(f"Extracted: service_type={service_type}, provider_id={provider_id}")
         
         if not service_type:
             return jsonify({"error": "Service type is required"}), 400
         
         if not provider_id:
-            print("No provider_id in request, getting from identities API")
-            # Get identities to find a provider ID if not provided
+            logger.info("No provider_id in request, getting from identities API")
             node_api = NodeAPI(node['ip'], node['port'], node['token'])
             identities = node_api.identity_list()
             
@@ -581,25 +527,22 @@ def create_service(node_id):
                 return jsonify({"error": "No identities found on node"}), 400
             
             provider_id = identities['identities'][0]['id']
-            print(f"Using provider_id from identity: {provider_id}")
+            logger.info(f"Using provider_id from identity: {provider_id}")
         
-        # Create service request with exact format required by API
         service_request = {
             "provider_id": provider_id,
-            "type": service_type  # Note: API expects "type", not "service_type"
+            "type": service_type
         }
         
-        print(f"Final service request payload: {service_request}")
+        logger.info(f"Final service request payload: {service_request}")
         
-        # Initialize node API
         node_api = NodeAPI(node['ip'], node['port'], node['token'])
         
-        # Try to start the service
         result = node_api.start_service(service_request)
         return jsonify({"success": True, "service": result})
                  
     except Exception as e:
-        print(f"Exception starting service: {str(e)}")
+        logger.error(f"Exception starting service: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/remove_node/<int:node_id>', methods=['POST'])
@@ -613,7 +556,6 @@ def remove_node(node_id):
             break
     return redirect(url_for('index'))
 
-# Global variable to cache CoinMarketCap data
 cmc_cache = {
     'data': None,
     'last_updated': None
@@ -621,12 +563,10 @@ cmc_cache = {
 
 @app.route('/api/myst-price')
 def myst_price():
-    # Check if we have cached data that's less than 10 minutes old
     if cmc_cache['data'] and cmc_cache['last_updated'] and \
        datetime.now() - cmc_cache['last_updated'] < timedelta(minutes=10):
         return jsonify(cmc_cache['data'])
     
-    # Fetch new data from CoinMarketCap
     api_key = request.args.get('api_key', '')
     if not api_key:
         return jsonify({"error": "API key is required"}), 400
@@ -647,9 +587,8 @@ def myst_price():
         
         data = response.json()
         
-        # Process the data to extract just what we need
         if 'data' in data and data['data']:
-            coin_data = list(data['data'].values())[0]  # Get the first (and only) item
+            coin_data = list(data['data'].values())[0]
             processed_data = {
                 'name': coin_data['name'],
                 'symbol': coin_data['symbol'],
@@ -668,7 +607,6 @@ def myst_price():
                 'last_updated': coin_data['quote']['USD']['last_updated']
             }
             
-            # Update cache
             cmc_cache['data'] = processed_data
             cmc_cache['last_updated'] = datetime.now()
             
@@ -689,14 +627,13 @@ def connection_stats(node_id):
         node_api = NodeAPI(node['ip'], node['port'], node['token'])
         stats = node_api.connection_statistics()
         
-        # Log connection statistics for debugging
-        print(f"\n=== Connection Statistics for node {node_id} ===")
-        print(f"Stats: {json.dumps(stats, indent=2)}")
-        print("=========================================\n")
+        logger.info(f"\n=== Connection Statistics for node {node_id} ===")
+        logger.info(f"Stats: {json.dumps(stats, indent=2)}")
+        logger.info("=========================================\n")
         
         return jsonify(stats)
     except Exception as e:
-        print(f"Error getting connection stats: {str(e)}")
+        logger.error(f"Error getting connection stats: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/node/<int:node_id>/session_stats/<string:session_id>')
@@ -709,14 +646,13 @@ def session_stats(node_id, session_id):
         node_api = NodeAPI(node['ip'], node['port'], node['token'])
         session_data = node_api.session_by_id(session_id)
         
-        # Log session data for debugging
-        print(f"\n=== Session Stats for node {node_id}, session {session_id} ===")
-        print(f"Data: {json.dumps(session_data, indent=2)}")
-        print("=========================================\n")
+        logger.info(f"\n=== Session Stats for node {node_id}, session {session_id} ===")
+        logger.info(f"Data: {json.dumps(session_data, indent=2)}")
+        logger.info("=========================================\n")
         
         return jsonify(session_data)
     except Exception as e:
-        print(f"Error getting session stats: {str(e)}")
+        logger.error(f"Error getting session stats: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/node/<int:node_id>/active_sessions')
@@ -728,19 +664,17 @@ def node_active_sessions(node_id):
     try:
         node_api = NodeAPI(node['ip'], node['port'], node['token'])
         
-        # Only get sessions data, avoid quality API calls
-        sessions = node_api.sessions({"page_size": 100})  # Smaller page size for active sessions
+        sessions = node_api.sessions({"page_size": 100})
         
-        print(f"Fetching active sessions for node {node_id} without quality metrics")
+        logger.info(f"Fetching active sessions for node {node_id} without quality metrics")
         
         return jsonify({
             'sessions': sessions
         })
     except Exception as e:
-        print(f"Error getting active sessions data: {str(e)}")
+        logger.error(f"Error getting active sessions data: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# Add this route to handle DELETE requests for stopping services
 @app.route('/node/<int:node_id>/services/<string:service_id>', methods=['DELETE'])
 def delete_service(node_id, service_id):
     node = get_node_by_id(node_id)
@@ -748,22 +682,153 @@ def delete_service(node_id, service_id):
         return jsonify({"error": "Node not found"}), 404
     
     try:
-        # Print debug information
-        print(f"\n=== Service Stop Request for Node {node_id} ===")
-        print(f"Stopping service with ID: {service_id}")
+        logger.info(f"\n=== Service Stop Request for Node {node_id} ===")
+        logger.info(f"Stopping service with ID: {service_id}")
         
-        # Initialize node API
         node_api = NodeAPI(node['ip'], node['port'], node['token'])
         
-        # Try to stop the service
         result = node_api.stop_service(service_id)
         
-        # Return success response
-        print(f"Service {service_id} stopped successfully")
+        logger.info(f"Service {service_id} stopped successfully")
         return jsonify({"success": True}), 200
     except Exception as e:
-        print(f"Exception stopping service: {str(e)}")
+        logger.error(f"Exception stopping service: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+@app.route('/update_node_password', methods=['POST'])
+def update_node_password():
+    node_id = request.form.get('node_id')
+    new_password = request.form.get('password')
+    
+    if not node_id or not new_password:
+        flash('Node ID and password are required', 'danger')
+        return redirect(url_for('index'))
+    
+    try:
+        node_id = int(node_id)
+    except ValueError:
+        flash('Invalid node ID', 'danger')
+        return redirect(url_for('index'))
+        
+    node = get_node_by_id(node_id)
+    
+    if not node:
+        flash('Node not found', 'danger')
+        return redirect(url_for('index'))
+    
+    try:
+        node_api = NodeAPI(node['ip'], node['port'])
+        token = node_api.authenticate(new_password)
+        
+        nodes = get_nodes()
+        for n in nodes:
+            if n.get('id') == node_id:
+                n['token'] = token
+                break
+                
+        save_nodes(nodes)
+        
+        if 'node_tokens' in session:
+            node_tokens = session.get('node_tokens', {})
+            if str(node_id) in node_tokens:
+                del node_tokens[str(node_id)]
+                session['node_tokens'] = node_tokens
+        
+        flash(f'Password updated for node {node["name"]}', 'success')
+    except Exception as e:
+        flash(f'Error updating password: {str(e)}', 'danger')
+    
+    return redirect(url_for('index'))
+
+def get_help_topics():
+    """Get a list of all available help topics."""
+    help_dir = os.path.join(os.path.dirname(__file__), 'help_content')
+    topics = []
+    
+    logger.info(f"\n=== Searching for help topics in: {help_dir} ===")
+    
+    if not os.path.exists(help_dir):
+        logger.warning(f"Help content directory not found at: {help_dir}")
+        try:
+            os.makedirs(help_dir)
+            logger.info(f"Created help_content directory at: {help_dir}")
+        except Exception as e:
+            logger.error(f"Error creating help_content directory: {e}")
+        return topics
+    
+    try:
+        all_files = os.listdir(help_dir)
+        logger.info(f"Found {len(all_files)} files in help_content directory:")
+        for file in all_files:
+            logger.info(f"  - {file}")
+    except Exception as e:
+        logger.error(f"Error listing help content directory: {e}")
+        return topics
+    
+    for filename in all_files:
+        if filename.endswith('.yaml'):
+            topic_id = filename[:-5]
+            
+            try:
+                with open(os.path.join(help_dir, filename), 'r') as file:
+                    topic_data = yaml.safe_load(file)
+                    
+                if not topic_data:
+                    logger.warning(f"Error: Empty or invalid YAML in {filename}")
+                    continue
+                
+                if 'color' not in topic_data or not topic_data['color']:
+                    topic_data['color'] = 'primary'
+                    
+                topics.append({
+                    'id': topic_id,
+                    'title': topic_data.get('title', topic_id),
+                    'description': topic_data.get('description', ''),
+                    'color': topic_data.get('color', 'primary'),
+                    'thumbnail_url': topic_data.get('thumbnail_url', '')
+                })
+                logger.info(f"Successfully loaded help topic: {topic_id} - {topic_data.get('title')} with color {topic_data.get('color', 'primary')}")
+            except Exception as e:
+                logger.error(f"Error loading help topic {filename}: {e}")
+    
+    logger.info(f"Total help topics loaded: {len(topics)}")
+    return topics
+
+def get_help_topic(topic_id):
+    """Get content for a specific help topic."""
+    help_file = os.path.join(os.path.dirname(__file__), 'help_content', f"{topic_id}.yaml")
+    
+    if not os.path.exists(help_file):
+        return None
+    
+    try:
+        with open(help_file, 'r') as file:
+            return yaml.safe_load(file)
+    except Exception as e:
+        logger.error(f"Error loading help topic {topic_id}: {e}")
+        return None
+
+@app.route('/help')    
+def help_index():
+    topics = get_help_topics()
+    return render_template('help/index.html', title='Help Center', topics=topics)
+
+@app.route('/help/<topic_id>')
+def help_topic(topic_id):
+    topic_data = get_help_topic(topic_id)
+    if not topic_data:
+        flash('Help topic not found', 'danger')
+        return redirect(url_for('help_index'))
+    
+    if topic_data and 'content_sections' in topic_data:
+        for section in topic_data['content_sections']:
+            if 'content' in section:
+                section['content'] = markdown.markdown(
+                    section['content'], 
+                    extensions=['tables', 'fenced_code', 'nl2br']
+                )
+    
+    return render_template('help/topic.html', title=f'Help: {topic_data.get("title")}', topic=topic_data)
 
 @app.context_processor
 def inject_now():

@@ -1,0 +1,28 @@
+title: Linux Native Install
+description: This will install a Mysterium node on Linux using the native install method.
+content_sections:
+  - heading: Install Process
+    content: |-
+      SSH into your device, container or VM.
+      ```
+      repository ppa:mysteriumnetwork/node
+      sudo apt-get update
+      sudo apt install myst
+      ```
+
+  - heading: Enable Start on Reboot
+    content: |-
+      ```
+      sudo systemctl enable myst
+      ```
+
+  - heading: Complete Setup
+    content: |-
+      Now go to http://<ip-address-of node>:4449
+      and follow the onscreen process to onboard your node.
+      
+      It may take several hours to onboard your node so you will see the Pending status while the process has propagated through the system.
+
+color: purple  # Optional: Override default color
+thumbnail_url: ""  # Optional: URL for thumbnail image
+footer: "For more detailed instructions, visit help.mystnodes.com"

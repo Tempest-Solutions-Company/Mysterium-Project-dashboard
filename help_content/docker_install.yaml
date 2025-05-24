@@ -1,0 +1,28 @@
+title: Docker Install Guide
+description: Install a Mysterium node using Docker for easy deployment and management.
+content_sections:
+  - heading: Prerequisites
+    content: |-
+      Make sure Docker is installed on your system. If not, install it:
+      ```
+      curl -fsSL https://get.docker.com | bash
+      ```
+
+  - heading: Pull and Run the Container
+    content: |-
+      Use the following command to pull and run the Mysterium node container:
+      ```
+      docker run -d --cap-add NET_ADMIN -p 4449:4449 \
+      --name myst -v myst-data:/var/lib/mysterium-node mysteriumnetwork/myst:latest \
+      --ui.enable --tequilapi.address 0.0.0.0
+      ```
+
+  - heading: Access the Web UI
+    content: |-
+      Access the web UI by navigating to:
+      ```
+      http://YOUR_SERVER_IP:4449
+      ```
+      Follow the on-screen instructions to complete setup.
+
+footer: "For more information, visit the official Mysterium Network docs"

@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', function() {
     formatTimestamps();
 });
 
-// Format bytes to human readable format
+// Add utility functions that are used across multiple templates
 function formatBytes(bytes, decimals = 2) {
     if (bytes === 0) return '0 Bytes';
     
@@ -55,11 +55,26 @@ function formatBytes(bytes, decimals = 2) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
-// Format duration in seconds to human readable format
 function formatDuration(seconds) {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
     
     return `${hours}h ${minutes}m ${secs}s`;
+}
+
+function formatCurrency(value) {
+    if (value >= 1000000000) {
+        return '$' + (value / 1000000000).toFixed(2) + 'B';
+    } else if (value >= 1000000) {
+        return '$' + (value / 1000000).toFixed(2) + 'M';
+    } else if (value >= 1000) {
+        return '$' + (value / 1000).toFixed(2) + 'K';
+    } else {
+        return '$' + value.toFixed(2);
+    }
+}
+
+function formatNumber(value) {
+    return new Intl.NumberFormat().format(value);
 }

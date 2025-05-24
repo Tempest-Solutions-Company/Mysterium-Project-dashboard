@@ -1,0 +1,59 @@
+title: Maximize Your Earning Potential
+description: Tips and strategies to increase your earnings as a Mysterium node runner.
+content_sections:
+  - heading: Understanding Earnings Factors
+    content: |-
+      Your node's earning potential depends on several key factors:
+      
+      - **Connection Quality**: Higher quality scores attract more traffic
+      - **IP Type**: Residential IPs generally earn more than hosting/datacenter IPs
+      - **Location**: Some geographic regions have higher demand
+      - **Traffic Types**: Different service types have different pricing
+      - **Uptime**: Longer, consistent uptime increases reliability and earnings
+      - **Node Age**: Established nodes with good history may receive more traffic
+
+  - heading: Improve Your Connection Quality
+    content: |-
+      Connection quality is critical for earnings. To improve it:
+      
+      - **Set up port forwarding**: Make sure ports 50000-60000 are open
+      - **Use a wired connection**: Ethernet is more stable than WiFi
+      - **Ensure adequate bandwidth**: At least 50 Mbps download/upload is recommended
+      - **Minimize latency**: Place your node close to your router
+      - **Keep your node updated**: Run the latest version for best performance
+      
+      Check your quality score in the dashboard. Scores above 2.5 are good, above 2.8 is excellent.
+
+  - heading: Optimal Node Setup
+    content: |-
+      For the best performance and earnings:
+      
+      - **Run on dedicated hardware**: Low-power devices like Raspberry Pi are ideal
+      - **Ensure 24/7 uptime**: Consistent availability builds reputation
+      - **Stable power supply**: Consider UPS for uninterrupted operation
+      - **Monitor regularly**: Check your node stats weekly at minimum
+
+  - heading: Location Considerations
+    content: |-
+      Location impacts earnings significantly:
+      
+      - **Residential areas**: Generally more valuable than datacenters
+      - **Under-served regions**: Less competition can mean more traffic
+      - **Different regions**: Traffic demand varies by geographic location
+      
+      While you can't easily change your location, this explains why earnings might differ between nodes.
+
+  - heading: Patience and Long-term Strategy
+    content: |-
+      Node running is a marathon, not a sprint:
+      
+      - **Regular updates**: Keep your node software current
+      - **Network growth**: Earnings potential increases with network usage
+      - **Stakig**: Staking your earnings can increase your profit.
+      
+      Many successful node runners report earnings increasing after 3-6 months of consistent operation.
+
+
+color: green
+thumbnail_url: ""
+footer: "For more detailed information, visit https://help.mystnodes.com/en/articles/8005135-how-can-i-maximise-my-earning-potential"

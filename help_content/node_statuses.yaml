@@ -1,0 +1,79 @@
+title: Node Statuses Explained
+description: Understanding the different status indicators on your Mysterium node dashboard.
+content_sections:
+  - heading: Overview
+    content: |-
+      Your node status provides important information about its current operational state. The status indicators appear on your node dashboard and help diagnose potential issues.
+      
+      This guide explains what each status means and what actions you might need to take.
+
+  - heading: Online Status
+    content: |-
+      **Online**: Your node is fully operational and can receive connection requests.
+      
+      - Successfully connected to the discovery network
+      - Service proposals are visible to potential users
+      - All required ports are properly configured
+      - No further action required - your node is working as expected
+      
+      This is the ideal state for your node. If your node shows "Online", it means all systems are operational and your node is ready to provide services and earn rewards.
+
+  - heading: Pending Status
+    content: |-
+      **Pending**: Your node is registered, but still setting up connections to the network.
+      
+      Common reasons for Pending status:
+      - New node that was just registered (can take up to 24 hours to come online)
+      - Recently restarted node that's reestablishing connections
+      - Minor network connectivity issues
+      
+      **Action Required**: Usually none - just wait. If the status persists for more than 24 hours, check your internet connection and firewall settings.
+
+  - heading: Offline Status
+    content: |-
+      **Offline**: Your node is not connected to the network and cannot provide services.
+      
+      Common reasons for Offline status:
+      - Internet connection issues 
+      - Router/firewall blocking required ports
+      - Mysterium service stopped or crashed
+      - Node software needs updating
+      
+      **Action Required**: Check your internet connection, router settings, and restart your node. Make sure required ports (especially 50000-60000 UDP) are open.
+
+  - heading: Unknown Status
+    content: |-
+      **Unknown**: The node's status cannot be determined.
+      
+      Common reasons for Unknown status:
+      - New node that hasn't registered on the network yet
+      - Communication issue between your node and the discovery service
+      - Problems with your node's identity
+      
+      **Action Required**: Wait 1-2 hours to see if the status resolves. If it persists, restart your node and check your internet connection.
+
+  - heading: Monitoring Failed
+    content: |-
+      **Monitoring Failed**: Your node is online but the network monitoring service cannot connect to it.
+      
+      Common reasons for Monitoring Failed status:
+      - Port forwarding not properly configured
+      - Router firewall blocking incoming connections
+      - Internet Service Provider (ISP) using CGNAT
+      
+      **Action Required**: Set up port forwarding for ports 50000-60000 UDP. Use `/help topic monitoring_failed` for detailed troubleshooting steps or `/help topic cgnat` if you suspect you're behind CGNAT.
+
+  - heading: Node Monitoring Status
+    content: |-
+      The node quality score:
+      
+      - **Connectivity**: Tests if your node can establish two-way connections
+      - **Latency**: Measures network response speed in milliseconds (lower is better)
+      - **Uptime**: Measures how long your node has been online (longer is better)
+      - **Quality Score**: An overall measurement of your node's reliability and performance
+      
+      **Action Required**: For best earnings, aim for a high quality score by ensuring good connectivity, low latency, and consistent uptime.
+
+color: blue
+thumbnail_url: ""
+footer: "For more information, visit https://help.mystnodes.com/en/articles/8005209-node-statuses-explained"

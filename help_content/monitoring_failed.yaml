@@ -1,0 +1,87 @@
+title: Troubleshooting "Connection Monitoring Failed" Errors
+description: How to fix the "Connection Monitoring Failed" warning on your Mysterium node and improve your quality score.
+content_sections:
+  - heading: Understanding the Issue
+    content: |-
+      The "Connection Monitoring Failed" error indicates your node cannot be properly monitored by the Mysterium Network quality assessment system. This affects your node's quality score and may reduce your earnings potential.
+      
+      Fixing this issue can significantly improve your node's discoverability and potential earnings.
+      
+  - heading: Required Port Forwarding
+    content: |-
+      For monitoring to work properly, the following ports must be accessible:
+      
+      - **UDP Port Range 50000-60000**: Required for service traffic and monitoring
+      - **TCP Port 4449**: Node UI web interface (local access only)
+      
+      If you're on a home network, incoming connections are likely being blocked by your router or firewall.
+
+  - heading: Solution 1: Enable UPnP
+    content: |-
+      The simplest solution is to enable UPnP (Universal Plug and Play) on both your router and node:
+      
+      1. Access your router's admin interface
+      2. Find the UPnP settings (may be in Security, Advanced, or NAT sections)
+      3. Enable UPnP and save changes
+      4. In your Mysterium node dashboard, go to Settings → Advanced
+      5. Set "NAT Type" to "auto"
+      6. Restart your node
+      
+      **Note**: Not all routers support UPnP, or it might be disabled by default for security reasons.
+
+  - heading: Solution 2: Manual Port Forwarding
+    content: |-
+      If UPnP doesn't work, manually forward the required ports:
+      
+      1. Find your node's local IP address:
+         - In your node dashboard, go to Help → Troubleshooting
+         - Look for the "Local IP" address
+      2. Access your router's admin panel (typically 192.168.0.1 or 192.168.1.1)
+      3. Navigate to Port Forwarding settings
+      4. Create this port forwarding rule to your node's IP:
+         - Forward external port range 50000-60000 to internal port range 50000-60000 (UDP)
+      
+      For detailed port forwarding instructions, use `/help topic manual_port_forward`
+
+  - heading: Solution 3: Check Firewall Settings
+    content: |-
+      Your device's firewall might also be blocking monitoring connections:
+      
+      **For Linux systems:**
+      ```
+      sudo iptables -A INPUT -p udp --dport 50000:60000 -j ACCEPT
+      ```
+      
+      **For Windows systems:**
+      1. Open Windows Defender Firewall
+      2. Create inbound rules for UDP port range 50000-60000
+      3. Allow the myst.exe application through the firewall
+
+  - heading: Verifying the Fix
+    content: |-
+      Once you've made the necessary changes:
+      
+      1. Restart your node
+      2. Wait 15-30 minutes for monitoring to retry
+      3. Check your node dashboard - the warning should disappear
+      
+      If the issue persists after proper port forwarding, your ISP might be using CGNAT (Carrier Grade NAT), which prevents incoming connections. In this case, contact your ISP or consider using a VPS to host your node instead.
+
+  - heading: Special Cases
+    content: |-
+      **CGNAT (Carrier Grade NAT):**
+      - Many mobile/LTE connections and some home ISPs use CGNAT
+      - No port forwarding solution will work in this case
+      - Consider moving to a provider that offers a public IP address
+      
+      **Cloud/VPS hosting:**
+      - Ensure security groups/firewalls allow inbound traffic on required ports
+      - For AWS: Configure both security groups and instance-level firewalls
+      - For Azure/GCP: Check network security rules
+      
+      **Double NAT:**
+      - If you have multiple routers, you must forward ports through each one
+
+color: red
+thumbnail_url: ""
+footer: "For more detailed instructions, visit https://help.mystnodes.com/en/articles/8565892-troubleshoot-connection-monitoring-failed-issues"

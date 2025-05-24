@@ -1,0 +1,142 @@
+title: Mysterium CLI Guide
+description: Learn how to use the Mysterium Command Line Interface (CLI) for advanced node management.
+content_sections:
+  - heading: Accessing the CLI
+    content: |-
+      The Mysterium CLI is a powerful tool for managing your node directly through terminal commands.
+      
+      **For Docker installations:**
+      ```
+      docker exec -it myst myst cli
+      ```
+      
+      **For native installations (Linux/macOS/Windows):**
+      ```
+      myst cli
+      ```
+      
+      You'll see a prompt like `[myst] >` when successfully connected.
+
+  - heading: Basic Commands
+    content: |-
+      **Get help:**
+      ```
+      > help
+      ```
+      
+      **Check node status:**
+      ```
+      > status
+      ```
+      
+      **Check node version:**
+      ```
+      > version
+      ```
+      
+      **Exit the CLI:**
+      ```
+      > quit
+      ```
+
+  - heading: Identity Management
+    content: |-
+      **List identities:**
+      ```
+      > identities list
+      ```
+      
+      **Create a new identity:**
+      ```
+      > identities new
+      ```
+      
+      **Get identity details:**
+      ```
+      > identities get [identity]
+      ```
+      
+      **Create a backup:**
+      ```
+      > identities get [identity] --backup
+      ```
+      
+      **Import an identity:**
+      ```
+      > identities import [path-to-backup]
+      ```
+      
+      **Unlock an identity:**
+      ```
+      > identities unlock [identity]
+      ```
+
+  - heading: Service Management
+    content: |-
+      **List services:**
+      ```
+      > service list
+      ```
+      
+      **Start services:**
+      ```
+      > service start
+      ```
+      
+      **Stop services:**
+      ```
+      > service stop
+      ```
+      
+      **Get service options:**
+      ```
+      > service options
+      ```
+      
+      **Set service options:**
+      ```
+      > service options --[option-name]=[value]
+      ```
+
+  - heading: Connection Management
+    content: |-
+      **List active connections:**
+      ```
+      > connection list
+      ```
+      
+      **Get connection statistics:**
+      ```
+      > connection statistics
+      ```
+
+  - heading: Advanced Commands
+    content: |-
+      **Reset node:**
+      ```
+      > reset
+      ```
+      
+      **Check proposal quality:**
+      ```
+      > quality
+      ```
+      
+      **Configure NAT traversal:**
+      ```
+      > nat [auto|manual|provider|none]
+      ```
+      
+      **Monitor logs:**
+      ```
+      > log
+      ```
+      
+      **Get NAT type:**
+      ```
+      > outbound
+      ```
+
+color: gray
+thumbnail_url: ""
+footer: "For detailed CLI documentation, visit https://help.mystnodes.com/en/articles/8006072-mysterium-cli"

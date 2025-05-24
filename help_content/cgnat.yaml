@@ -1,0 +1,65 @@
+title: Am I Behind CGNAT?
+description: How to determine if your ISP uses Carrier-Grade NAT (CGNAT) and what to do if you're behind CGNAT.
+content_sections:
+  - heading: What is CGNAT?
+    content: |-
+      Carrier-Grade NAT (CGNAT) is a technique used by Internet Service Providers (ISPs) to conserve IPv4 addresses by sharing a single public IP address among multiple customers.
+      
+      When you're behind CGNAT:
+      - Your connection uses a private IP that's shared with other users
+      - You cannot receive incoming connections from the internet
+      - Port forwarding will not work
+      - Running services that require incoming connections (like Mysterium Node) becomes difficult
+
+  - heading: How to Check if You're Behind CGNAT
+    content: |-
+      **Method 1: Compare IP Addresses**
+      
+      1. Check your router's WAN/Internet IP address:
+         - Log into your router admin panel (typically 192.168.0.1 or 192.168.1.1)
+         - Find the WAN or Internet status page
+         - Note the IP address shown
+      
+      2. Check your public IP address:
+         - Visit whatismyip.com or similar website
+         - Note the IP address shown
+      
+      3. **Compare**: If these two IP addresses are different, you're likely behind CGNAT
+      
+      **Method 2: Check IP Address Range**
+      
+      If your public IP falls within these ranges, you're behind CGNAT:
+      - 100.64.0.0 - 100.127.255.255 (RFC 6598, specifically for CGNAT)
+      - 10.0.0.0 - 10.255.255.255 (RFC 1918 private range)
+      - 172.16.0.0 - 172.31.255.255 (RFC 1918 private range)
+      - 192.168.0.0 - 192.168.255.255 (RFC 1918 private range)
+
+  - heading: Port Forwarding Behind CGNAT
+    content: |-
+      **Important**: Standard port forwarding CANNOT work if you're behind CGNAT.
+      
+      When you set up port forwarding on your router, you're only forwarding within your private network, but the CGNAT still blocks incoming connections from reaching your router.
+      
+      This is why you may experience "Connection monitoring failed" errors on your Mysterium node even after setting up port forwarding correctly on your router.
+
+  - heading: Options for Running a Node Behind CGNAT
+    content: |-
+      If you confirm you're behind CGNAT, you have several options:
+      
+      **Contact Your ISP**: 
+         - Ask if they can provide a public/static IP address
+         - This may require upgrading to a business plan or paying an additional fee
+
+  - heading: Check with Your ISP
+    content: |-
+      If you suspect you're behind CGNAT, contact your ISP's support and ask:
+      
+      1. "Does my connection use Carrier-Grade NAT (CGNAT)?"
+      2. "Can I get a public IP address for my connection?"
+      3. "Is there a fee for a static or public IP address?"
+      
+      Be prepared to explain why you need a public IP address - for running a legitimate privacy service node.
+
+color: orange
+thumbnail_url: ""
+footer: "If you need more assistance, ask in the Mysterium Discord server for community support or contact official Mysterium support"

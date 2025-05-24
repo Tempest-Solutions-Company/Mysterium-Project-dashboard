@@ -1,0 +1,62 @@
+title: Staying Safe as a Node Runner
+description: Information about node safety, legal considerations, and protections in place for Mysterium node operators.
+content_sections:
+  - heading: Understanding Node Traffic
+    content: |-
+      When you run a Mysterium node, you are sharing your internet connection with others:
+      
+      - Your node becomes part of a decentralized network
+      - Users can route their internet traffic through your connection
+      - This helps provide privacy and censorship resistance
+      - Traffic passes through your IP address but is encrypted
+      
+      **Important:** Like any VPN or proxy service, this raises questions about traffic content and legal implications.
+
+  - heading: How Node Runners Are Protected
+    content: |-
+      Mysterium Network has implemented multiple layers of protection for node runners:
+      
+      1. **Legal Protections:** Node runners are operating as infrastructure providers, similar to ISPs, which in many jurisdictions gives protection under "safe harbor" provisions
+      
+      2. **B2B Traffic:** By default, nodes only allow traffic to whitelisted domains (unless you specifically disable this)
+      
+      3. **Service Filtering:** You can choose which services your node supports (B2B, Public, VPN, etc.) 
+      
+      4. **Advanced Traffic Filtering:** The Mysterium team actively researches and implements filtering technologies
+
+  - heading: Whitelisted Traffic System
+    content: |-
+      Mysterium's whitelist system is a key protection:
+      
+      - Enabled by default on all nodes
+      - Only allows traffic to domains verified to be legitimate
+      - Regularly updated with domains that meet strict criteria
+      - Blocks potential problematic traffic
+      - This traffic is B2B only, not public VPN traffic
+      
+      **Note:** You can disable the other traffic such as public and VPN, but this increases risk and is not recommended for most operators.
+
+  - heading: Additional Recommendations
+    content: |-
+      To maximize your safety as a node operator:
+      
+      - Keep the whitelist system enabled (B2B traffic)
+      - Update your node regularly for the latest safety features
+      - Consider running your node in a Docker container for added isolation
+      - Use a dedicated device rather than your personal computer
+      - Don't keep logs of user traffic
+      - Be aware of your local regulations regarding VPN/proxy services
+
+  - heading: Business Entity Protection
+    content: |-
+      For additional protection, consider:
+      
+      - Running your node under a registered business entity
+      - This may provide additional legal protections in many jurisdictions
+      - Allows for proper accounting and tax handling of earnings
+      
+      Visit [mystnodes.com](https://mystnodes.com) for more information.
+
+color: blue
+thumbnail_url: ""
+footer: "For more information, visit https://help.mystnodes.com/en/articles/8005105-can-my-node-be-used-for-illegal-activities-how-do-we-protect-node-runners"

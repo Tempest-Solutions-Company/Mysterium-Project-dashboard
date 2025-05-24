@@ -1,0 +1,89 @@
+title: Updating Your Node
+description: How to update your Mysterium Node to the latest version for best performance and features.
+content_sections:
+  - heading: General Information
+    content: |-
+      Keeping your node up-to-date ensures:
+      - Access to the latest features
+      - Improved performance and stability
+      - Compatibility with network upgrades
+      - Better security and bug fixes
+      
+      The update process depends on your installation method.
+
+  - heading: Docker Installation Updates
+    content: |-
+      To update a Docker-based node:
+      
+      1. Pull the latest image:
+      ```
+      docker pull mysteriumnetwork/myst:latest
+      ```
+      
+      2. Stop and remove the current container:
+      ```
+      docker stop myst
+      docker rm myst
+      ```
+      
+      3. Start a new container with the same parameters:
+      ```
+      docker run -d --cap-add NET_ADMIN -p 4449:4449 \
+      --name myst -v myst-data:/var/lib/mysterium-node mysteriumnetwork/myst:latest \
+      --ui.enable --tequilapi.address 0.0.0.0
+      ```
+      
+      Your settings and identity will be preserved as they're stored in the volume.
+
+  - heading: Linux Native Installation Updates
+    content: |-
+      For nodes installed via apt:
+      
+      ```
+      sudo apt-get update
+      sudo apt-get install myst
+      ```
+      
+      The service will restart automatically with the updated version.
+
+  - heading: Raspberry Pi Updates
+    content: |-
+      For Raspberry Pi installations using the installer:
+      
+      1. Download the latest installer:
+      ```
+      wget -O myst_install.sh https://raw.githubusercontent.com/mysteriumnetwork/node/master/install.sh
+      ```
+      
+      2. Make it executable and run:
+      ```
+      chmod +x myst_install.sh
+      sudo ./myst_install.sh
+      ```
+      
+      This will update your existing installation.
+
+  - heading: Windows and macOS Updates
+    content: |-
+      For desktop applications:
+      
+      1. Download the latest installer from [MysteriumVPN.com](https://mysteriumvpn.com)
+      2. Run the installer, which will automatically update your existing installation
+      3. Your settings and identity will be preserved
+
+  - heading: Verifying the Update
+    content: |-
+      To verify you're running the latest version:
+      
+      1. Access your node's web UI at http://[node-ip]:4449/
+      2. Check the version in the bottom left corner
+      3. Compare with the latest version on [GitHub Releases](https://github.com/mysteriumnetwork/node/releases)
+      
+      You can also check using the CLI:
+      ```
+      myst version
+      ```
+
+color: green
+thumbnail_url: ""
+footer: "For detailed instructions, visit https://help.mystnodes.com/en/articles/8005521-updating-your-node"

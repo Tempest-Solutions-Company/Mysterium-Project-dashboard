@@ -1,0 +1,66 @@
+title: Manual Port Forwarding Guide
+description: Learn how to manually set up port forwarding for your Mysterium node to improve connectivity and performance.
+content_sections:
+  - heading: Why Port Forwarding Matters
+    content: |-
+      Port forwarding allows external traffic to reach your Mysterium node, which:
+      - Improves connection quality score
+      - Enables better traffic routing
+      - Increases your node's accessibility
+      - Can help resolve "Connection monitoring failed" errors
+      - May improve earnings by making your node more reliable
+
+  - heading: Required Ports
+    content: |-
+      For optimal performance, your Mysterium node needs these ports forwarded:
+      
+      - **TCP/UDP Ports 50000-60000 or 50000:60000**: Used for service traffic (Wireguard, DVPN, scraping, etc.)
+      - **TCP Port 4449**: Web UI access (optional, local network only)
+      
+      Port forwarding should be configured on your router to direct traffic to your node's local IP address.
+
+  - heading: Finding Your Router
+    content: |-
+      1. Find your router's IP address:
+         - **Windows**: Open Command Prompt and type `ipconfig`, look for "Default Gateway"
+         - **Linux/Mac**: Open Terminal and type `ip route | grep default`, look for the IP after "via"
+         
+      2. Access your router by entering this IP address in a web browser (typically 192.168.1.1 or 192.168.0.1)
+      
+      3. Log in with your router's admin credentials (check router documentation if unknown)
+
+  - heading: Setting Up Port Forwarding
+    content: |-
+      The exact steps vary by router brand, but generally:
+      
+      1. Log in to your router's admin panel
+      2. Look for "Port Forwarding", "Virtual Server", or "NAT" settings
+      3. Add a new port forwarding rule:
+         - **Local IP**: Your node device's internal IP address
+         - **Local Port**: 50000-60000 or 50000:60000 (UDP)
+         - **External Port**: 50000-60000 or 50000:60000
+         - **Protocol**: UDP
+      
+      **Example for popular routers:**
+      
+      **TP-Link:**
+      - Navigate to "Advanced" > "NAT Forwarding" > "Virtual Servers"
+      - Add port range 50000-60000 pointing to your node's IP
+      
+      **Netgear:**
+      - Navigate to "Advanced" > "Advanced Setup" > "Port Forwarding"
+      - Create custom services for each required port/range
+
+  - heading: Alternative Setup with DMZ
+    content: |-
+      If individual port forwarding is difficult, you can use DMZ (Demilitarized Zone):
+      
+      1. In your router settings, find the DMZ option
+      2. Enter your Mysterium node's local IP address
+      3. Enable the DMZ
+      
+      **Warning:** DMZ forwards ALL ports to your device, which presents security risks. Only use this for dedicated node devices, not personal computers.
+
+color: orange
+thumbnail_url: ""
+footer: "For detailed instructions, visit https://help.mystnodes.com/en/articles/8005269-manual-port-forwarding"
